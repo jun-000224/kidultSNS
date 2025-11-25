@@ -39,6 +39,15 @@ function Feed() {
   // 우측 프로필 카드용 유저 정보
   const [user, setUser] = useState(null);
 
+  // 우측 상단 검색어
+  const [search, setSearch] = useState('');
+
+  // 게시하기 모달용 상태
+  const [writeOpen, setWriteOpen] = useState(false);
+  const [writeTitle, setWriteTitle] = useState('');
+  const [writeContent, setWriteContent] = useState('');
+  const [writeFiles, setWriteFiles] = useState([]);   // 게시하기 이미지 목록
+
   const navigate = useNavigate();
 
   // 피드 목록 조회
@@ -109,31 +118,98 @@ function Feed() {
     }
   };
 
+  // 게시하기 모달 열기
+  const handleOpenWrite = () => {
+    setWriteOpen(true);
+  };
+
+  // 게시하기 모달 닫기
+  const handleCloseWrite = () => {
+    setWriteOpen(false);
+    setWriteTitle('');
+    setWriteContent('');
+    setWriteFiles([]);
+  };
+
+  // 게시하기 이미지 선택
+  const handleWriteFileChange = (event) => {
+    const selected = Array.from(event.target.files || []);
+    // 최대 5장까지만 저장
+    const limited = selected.slice(0, 5);
+    setWriteFiles(limited);
+  };
+
+  // 게시하기 저장 (텍스트 + 이미지 여러장)
+  const handleSubmitWrite = async () => {
+    if (!writeContent.trim()) {
+      alert("내용을 입력해주세요.");
+      return;
+    }
+
+    const token = localStorage.getItem("token");
+    if (!token) {
+      alert("로그인 후 이용해주세요.");
+      return;
+    }
+
+    const decoded = jwtDecode(token);
+
+    try {
+      const formData = new FormData();
+      formData.append("userId", decoded.userId);
+      formData.append("title", writeTitle);
+      formData.append("content", writeContent);
+
+      // 이미지 파일들 추가
+      writeFiles.forEach((file) => {
+        formData.append("file", file);
+      });
+
+      const res = await fetch("http://localhost:3010/feed/write", {
+        method: "POST",
+        body: formData
+      });
+
+      const data = await res.json();
+      console.log("write result ==> ", data);
+
+      if (data.result === "success") {
+        alert("게시되었습니다.");
+        handleCloseWrite();
+        fnFeeds();
+      } else {
+        alert("게시 중 오류가 발생했습니다.");
+      }
+    } catch (e) {
+      console.log(e);
+      alert("오류가 발생했습니다.");
+    }
+  };
+
   return (
     <Box
       sx={{
         minHeight: '100vh',
-        backgroundColor: '#ffffffff',
+        backgroundColor: '#ffffff',
         paddingY: 4,
         paddingX: 3,
         display: 'flex',
         justifyContent: 'center'
       }}
     >
-      {/* 가운데 피드 + 오른쪽 프로필을 감싸는 영역 */}
       <Box
         sx={{
           width: '100%',
-          maxWidth: 1200,
+          maxWidth: 1100,   // 가운데 영역 전체 너비를 조금 줄임
           display: 'flex',
-          gap: 4
+          gap: 3
         }}
       >
         {/* 중앙 피드 영역 */}
         <Box
           sx={{
-            flex: 2,
-            maxWidth: 700
+            flex: 3,       // 가운데 피드 비율
+            pr: 1
           }}
         >
           {/* 타이틀 영역 */}
@@ -207,7 +283,7 @@ function Feed() {
                     <CardMedia
                       component="img"
                       height="260"
-                      image={feed.imgPath}
+                      image={"http://localhost:3010" + feed.imgPath}
                       alt={feed.imgName}
                       sx={{
                         objectFit: 'cover'
@@ -258,11 +334,27 @@ function Feed() {
         <Box
           sx={{
             flex: 1,
-            maxWidth: 200,
-            marginLeft : 3,
+            maxWidth: 280,
+            ml: 2,
             display: { xs: 'none', md: 'block' }
           }}
         >
+          {/* 상단 검색창 */}
+          <TextField
+            size="small"
+            placeholder="검색"
+            fullWidth
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            sx={{
+              mb: 2,
+              backgroundColor: '#ffffff',
+              '& .MuiOutlinedInput-root': {
+                borderRadius: '999px'
+              }
+            }}
+          />
+
           <Paper
             elevation={3}
             sx={{
@@ -275,11 +367,18 @@ function Feed() {
             <Avatar
               alt="프로필 이미지"
               src={
-                user?.profileImg
-                  ? "http://localhost:3010/uploads/" + user.profileImg
-                  : "https://images.unsplash.com/photo-1551963831-b3b1ca40c98e"
+                user?.profileImgPath
+                  ? "http://localhost:3010" + user.profileImgPath
+                  : "http://localhost:3010/uploads/userDefault.png"
               }
-              sx={{ width: 90, height: 90, margin: '0 auto', mb: 2 }}
+              sx={{
+                width: 90,
+                height: 90,
+                margin: '0 auto',
+                mb: 2,
+                border: "2px solid #00040fff",
+                boxSizing: "border-box"
+              }}
             />
             <Typography variant="h6" sx={{ fontWeight: 600 }}>
               {user?.userName || '키덜트 유저'}
@@ -288,15 +387,205 @@ function Feed() {
               @{user?.userId || 'user'}
             </Typography>
 
-            <Typography variant="body2" sx={{ color: '#6b7280', mt: 1 }}>
-              팔로잉
+            <Typography
+              variant="body2"
+              sx={{
+                color: '#6b7280',
+                mt: 1,
+                display: 'flex',
+                justifyContent: 'center',
+                gap: '24px'
+              }}
+            >
+              <span>팔로잉</span>
+              <span>팔로워</span>
             </Typography>
-            <Typography variant="h6" sx={{ fontWeight: 600 }}>
-              {user?.following || 0}
+            <Typography
+              variant="h6"
+              sx={{
+                fontWeight: 600,
+                display: 'flex',
+                justifyContent: 'center',
+                gap: '32px'
+              }}
+            >
+              <span>{user?.following || 0}</span>
+              <span>{user?.follower || 0}</span>
             </Typography>
           </Paper>
+
+          {/* 하단 게시하기 버튼 */}
+          <Button
+            variant="contained"
+            onClick={handleOpenWrite}
+            sx={{
+              mt: 3,
+              width: '100%',
+              borderRadius: '999px',
+              backgroundColor: '#020617',
+              color: '#ffffff',
+              paddingY: 1.3,
+              fontWeight: 700,
+              fontSize: '0.95rem',
+              textTransform: 'none',
+              boxShadow: '0 16px 40px rgba(15,23,42,0.35)',
+              '&:hover': {
+                backgroundColor: '#020617'
+              }
+            }}
+          >
+            게시하기
+          </Button>
         </Box>
       </Box>
+
+      {/* 피드 작성 모달 */}
+      <Dialog
+        open={writeOpen}
+        onClose={handleCloseWrite}
+        fullWidth
+        maxWidth="sm"
+        PaperProps={{
+          sx: {
+            borderRadius: '24px',
+            paddingY: 1
+          }
+        }}
+      >
+        <DialogTitle
+          sx={{
+            fontSize: '0.95rem',
+            fontWeight: 600,
+            paddingX: 3,
+            paddingY: 1,
+            borderBottom: '1px solid #e5e7eb'
+          }}
+        >
+          새 피드 작성
+          <IconButton
+            edge="end"
+            onClick={handleCloseWrite}
+            aria-label="close"
+            sx={{ position: 'absolute', right: 12, top: 8 }}
+          >
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
+
+        <DialogContent
+          sx={{
+            paddingX: 3,
+            paddingTop: 2,
+            paddingBottom: 1
+          }}
+        >
+          <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
+            <Avatar
+              alt="프로필 이미지"
+              src={
+                user?.profileImgPath
+                  ? "http://localhost:3010" + user.profileImgPath
+                  : "http://localhost:3010/uploads/userDefault.png"
+              }
+            >
+              {user?.userName
+                ? user.userName.charAt(0).toUpperCase()
+                : 'U'}
+            </Avatar>
+
+            <Box sx={{ flex: 1 }}>
+              <Typography
+                variant="subtitle2"
+                sx={{ mb: 1, fontWeight: 600 }}
+              >
+                {user?.userName || '키덜트 유저'}
+              </Typography>
+
+              <TextField
+                placeholder="제목을 입력하세요."
+                fullWidth
+                variant="standard"
+                value={writeTitle}
+                onChange={(e) => setWriteTitle(e.target.value)}
+                sx={{ mb: 2 }}
+              />
+
+              <TextField
+                placeholder="무슨 일이 일어나고 있나요?"
+                fullWidth
+                multiline
+                minRows={3}
+                value={writeContent}
+                onChange={(e) => setWriteContent(e.target.value)}
+                variant="standard"
+              />
+            </Box>
+          </Box>
+
+          {/* 이미지 업로드 영역 */}
+          <Box sx={{ mt: 1 }}>
+            <Typography
+              variant="body2"
+              sx={{ mb: 1, color: '#6b7280' }}
+            >
+              이미지 첨부  최대 5장까지 업로드 가능합니다.
+            </Typography>
+            <Button
+              component="label"
+              variant="outlined"
+              sx={{
+                textTransform: 'none',
+                borderRadius: '999px',
+                paddingX: 2
+              }}
+            >
+              이미지 선택
+              <input
+                type="file"
+                hidden
+                multiple
+                accept="image/*"
+                onChange={handleWriteFileChange}
+              />
+            </Button>
+            {writeFiles.length > 0 && (
+              <Typography
+                variant="body2"
+                sx={{ mt: 1, color: '#4b5563' }}
+              >
+                선택된 파일  {writeFiles.length}개
+              </Typography>
+            )}
+          </Box>
+        </DialogContent>
+
+        <DialogActions
+          sx={{
+            paddingX: 3,
+            paddingBottom: 2,
+            borderTop: '1px solid #e5e7eb'
+          }}
+        >
+          <Button
+            onClick={handleCloseWrite}
+            sx={{ textTransform: 'none' }}
+          >
+            취소
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleSubmitWrite}
+            sx={{
+              borderRadius: '999px',
+              paddingX: 3,
+              textTransform: 'none',
+              fontWeight: 600
+            }}
+          >
+            게시하기
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* 피드 상세 모달 */}
       <Dialog
@@ -351,7 +640,7 @@ function Feed() {
                 }}
               >
                 <img
-                  src={selectedFeed.imgPath}
+                  src={"http://localhost:3010" + selectedFeed.imgPath}
                   alt={selectedFeed.imgName}
                   style={{
                     width: '100%',
