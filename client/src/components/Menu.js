@@ -1,55 +1,235 @@
+// src/components/Menu.js
 import React from 'react';
-import { Drawer, List, ListItem, ListItemText, Typography, Toolbar, ListItemIcon } from '@mui/material';
-import { Home, Add, AccountCircle } from '@mui/icons-material';
+import {
+  Drawer,
+  List,
+  ListItemButton,
+  ListItemIcon,
+  ListItemText,
+  Box
+} from '@mui/material';
+import HomeOutlinedIcon from '@mui/icons-material/HomeOutlined';
+import SurfingIcon from '@mui/icons-material/Surfing';
+import SearchIcon from '@mui/icons-material/Search';
+import ReplayIcon from '@mui/icons-material/Replay';
+import MailOutlineIcon from '@mui/icons-material/MailOutline';
+import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
+import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
+import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import { Link } from 'react-router-dom';
-import Mui from './Mui';
 
 function Menu() {
+  // 사이드 메뉴 전체 너비
+  const drawerWidth = 130;
+
+  // 공통 메뉴 스타일
+  const commonItemSx = {
+    py: 0.5,                 // 위아래 패딩
+    px: 1.4,                 // 좌우 패딩
+    justifyContent: 'flex-start',
+    borderRadius: '12px',
+    mx: 1,
+    '&:hover': {
+      backgroundColor: '#f3f4f6'
+    },
+    // 기본은 텍스트 숨기기
+    '& .menu-label': {
+      opacity: 0,
+      maxWidth: 0,
+      whiteSpace: 'nowrap',   // 줄바꿈 방지
+      overflow: 'hidden',
+      transition: 'all 0.2s ease'
+    },
+    // 호버 시 텍스트 펼치기
+    '&:hover .menu-label': {
+      opacity: 1,
+      maxWidth: 140,
+      ml: 1.4
+    }
+  };
+
   return (
     <Drawer
       variant="permanent"
       sx={{
-        width: 240,
+        width: drawerWidth,
         flexShrink: 0,
         '& .MuiDrawer-paper': {
-          width: 240,
+          overflow: 'hidden',          // 스크롤바 제거
+          width: drawerWidth,
           boxSizing: 'border-box',
-        },
+          borderRight: 'none',         // 피드와 구분선 제거
+          backgroundColor: '#ffffff'
+        }
       }}
     >
-      <Toolbar />
-      <Typography variant="h6" component="div" sx={{ p: 2 }}>
-        SNS 메뉴
-      </Typography>
-      <List>
-        <ListItem button component={Link} to="/feed">
-          <ListItemIcon>
-            <Home />
-          </ListItemIcon>
-          <ListItemText primary="피드" />
-        </ListItem>
+      {/* 로고 영역 */}
+      <Box
+        sx={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          paddingY: 1.5
+        }}
+      >
+        <Box
+          sx={{
+            width: 44,
+            height: 44,
+            borderRadius: '14px',
+            overflow: 'hidden',
+            border: '1px solid #e5e7eb',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: '#f3f4f6'
+          }}
+        >
+          <img
+            src="http://localhost:3010/uploads/HW_LOGO.png"
+            alt="Hobby Wave Logo"
+            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          />
+        </Box>
+      </Box>
 
-        <ListItem button component={Link} to="/register">
-          <ListItemIcon>
-            <Add />
+      {/* 메뉴 리스트 */}
+      <List
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 0.3,
+          overflow: 'hidden',
+          pt: 0.5
+        }}
+      >
+        {/* 홈 */}
+        <ListItemButton
+          component={Link}
+          to="/feed"
+          sx={commonItemSx}
+        >
+          <ListItemIcon sx={{ minWidth: 0, justifyContent: 'center' }}>
+            <HomeOutlinedIcon sx={{ fontSize: 22 }} />
           </ListItemIcon>
-          <ListItemText primary="등록" />
-        </ListItem>
+          <ListItemText
+            primary="홈"
+            className="menu-label"
+            primaryTypographyProps={{ fontSize: 14, fontWeight: 500 }}
+          />
+        </ListItemButton>
 
-        <ListItem button component={Link} to="/mypage">
-          <ListItemIcon>
-            <AccountCircle />
+        {/* 파도타기 */}
+        <ListItemButton
+          component={Link}
+          to="/register"
+          sx={commonItemSx}
+        >
+          <ListItemIcon sx={{ minWidth: 0, justifyContent: 'center' }}>
+            <SurfingIcon sx={{ fontSize: 22 }} />
           </ListItemIcon>
-          <ListItemText primary="마이페이지" />
-        </ListItem>
+          <ListItemText
+            primary="파도타기"
+            className="menu-label"
+            primaryTypographyProps={{ fontSize: 14, fontWeight: 500 }}
+          />
+        </ListItemButton>
 
-        {/* mui 테스트 페이지 */}
-        <ListItem button component={Link} to="/mui">
-          <ListItemIcon>
-            <Home />
+        {/* 검색 */}
+        <ListItemButton
+          component={Link}
+          to="#"
+          sx={commonItemSx}
+        >
+          <ListItemIcon sx={{ minWidth: 0, justifyContent: 'center' }}>
+            <SearchIcon sx={{ fontSize: 22 }} />
           </ListItemIcon>
-          <ListItemText primary="mui테스트" />
-        </ListItem>
+          <ListItemText
+            primary="검색"
+            className="menu-label"
+            primaryTypographyProps={{ fontSize: 14, fontWeight: 500 }}
+          />
+        </ListItemButton>
+
+        {/* 다시보기 */}
+        <ListItemButton
+          component={Link}
+          to="#"
+          sx={commonItemSx}
+        >
+          <ListItemIcon sx={{ minWidth: 0, justifyContent: 'center' }}>
+            <ReplayIcon sx={{ fontSize: 22 }} />
+          </ListItemIcon>
+          <ListItemText
+            primary="다시보기"
+            className="menu-label"
+            primaryTypographyProps={{ fontSize: 14, fontWeight: 500 }}
+          />
+        </ListItemButton>
+
+        {/* 메시지 */}
+        <ListItemButton
+          component={Link}
+          to="#"
+          sx={commonItemSx}
+        >
+          <ListItemIcon sx={{ minWidth: 0, justifyContent: 'center' }}>
+            <MailOutlineIcon sx={{ fontSize: 22 }} />
+          </ListItemIcon>
+          <ListItemText
+            primary="메시지"
+            className="menu-label"
+            primaryTypographyProps={{ fontSize: 14, fontWeight: 500 }}
+          />
+        </ListItemButton>
+
+        {/* 알림 */}
+        <ListItemButton
+          component={Link}
+          to="#"
+          sx={commonItemSx}
+        >
+          <ListItemIcon sx={{ minWidth: 0, justifyContent: 'center' }}>
+            <FavoriteBorderIcon sx={{ fontSize: 22 }} />
+          </ListItemIcon>
+          <ListItemText
+            primary="알림"
+            className="menu-label"
+            primaryTypographyProps={{ fontSize: 14, fontWeight: 500 }}
+          />
+        </ListItemButton>
+
+        {/* 마이페이지 */}
+        <ListItemButton
+          component={Link}
+          to="/mypage"
+          sx={commonItemSx}
+        >
+          <ListItemIcon sx={{ minWidth: 0, justifyContent: 'center' }}>
+            <PersonOutlineIcon sx={{ fontSize: 22 }} />
+          </ListItemIcon>
+          <ListItemText
+            primary="마이페이지"
+            className="menu-label"
+            primaryTypographyProps={{ fontSize: 14, fontWeight: 500 }}
+          />
+        </ListItemButton>
+
+        {/* 설정 */}
+        <ListItemButton
+          component={Link}
+          to="#"
+          sx={commonItemSx}
+        >
+          <ListItemIcon sx={{ minWidth: 0, justifyContent: 'center' }}>
+            <SettingsOutlinedIcon sx={{ fontSize: 22 }} />
+          </ListItemIcon>
+          <ListItemText
+            primary="설정"
+            className="menu-label"
+            primaryTypographyProps={{ fontSize: 14, fontWeight: 500 }}
+          />
+        </ListItemButton>
       </List>
     </Drawer>
   );
