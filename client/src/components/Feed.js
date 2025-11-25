@@ -26,7 +26,7 @@ import { jwtDecode } from "jwt-decode";
 import { useNavigate } from 'react-router-dom';
 
 function Feed() {
-  // 모달 열림 여부
+  // 상세 모달 열림 여부
   const [open, setOpen] = useState(false);
   // 선택된 피드 정보
   const [selectedFeed, setSelectedFeed] = useState(null);
@@ -46,7 +46,7 @@ function Feed() {
   const [writeOpen, setWriteOpen] = useState(false);
   const [writeTitle, setWriteTitle] = useState('');
   const [writeContent, setWriteContent] = useState('');
-  const [writeFiles, setWriteFiles] = useState([]);   // 게시하기 이미지 목록
+  const [writeFiles, setWriteFiles] = useState([]);   // 게시 모달에서 선택한 이미지들
 
   const navigate = useNavigate();
 
@@ -84,17 +84,17 @@ function Feed() {
     }
   }
 
-  // 첫 렌더링 시 피드 + 유저 정보 조회
+  // 사이트 처음 진입 시 피드 + 유저 정보 조회
   useEffect(() => {
     fnFeeds();
     fnGetUser();
   }, []);
 
-  // 피드 클릭 시 상세 모달 열기
+  // 피드 카드 클릭 시 상세 모달 열기
   const handleClickOpen = (feed) => {
     setSelectedFeed(feed);
     setOpen(true);
-    // 임시 더미 댓글 데이터
+    // 현재는 더미 댓글
     setComments([
       { id: 'user1', text: '멋진 피규어네요.' },
       { id: 'user2', text: '컬러감이 너무 예뻐요.' },
@@ -103,7 +103,7 @@ function Feed() {
     setNewComment('');
   };
 
-  // 모달 닫기
+  // 상세 모달 닫기
   const handleClose = () => {
     setOpen(false);
     setSelectedFeed(null);
@@ -131,11 +131,10 @@ function Feed() {
     setWriteFiles([]);
   };
 
-  // 게시하기 이미지 선택
+  // 게시 모달에서 이미지 선택
   const handleWriteFileChange = (event) => {
     const selected = Array.from(event.target.files || []);
-    // 최대 5장까지만 저장
-    const limited = selected.slice(0, 5);
+    const limited = selected.slice(0, 5);  // 최대 5장까지
     setWriteFiles(limited);
   };
 
@@ -160,7 +159,6 @@ function Feed() {
       formData.append("title", writeTitle);
       formData.append("content", writeContent);
 
-      // 이미지 파일들 추가
       writeFiles.forEach((file) => {
         formData.append("file", file);
       });
@@ -186,6 +184,13 @@ function Feed() {
     }
   };
 
+  // 이미지 경로 보정 함수
+  const getImgUrl = (path) => {
+    if (!path) return "";
+    if (path.startsWith("http")) return path;
+    return "http://localhost:3010" + path;
+  };
+
   return (
     <Box
       sx={{
@@ -197,10 +202,11 @@ function Feed() {
         justifyContent: 'center'
       }}
     >
+      {/* 가운데 피드 + 오른쪽 프로필을 감싸는 영역 */}
       <Box
         sx={{
           width: '100%',
-          maxWidth: 1100,   // 가운데 영역 전체 너비를 조금 줄임
+          maxWidth: 1100,   // 전체 메인 영역 너비
           display: 'flex',
           gap: 3
         }}
@@ -208,7 +214,7 @@ function Feed() {
         {/* 중앙 피드 영역 */}
         <Box
           sx={{
-            flex: 3,       // 가운데 피드 비율
+            flex: 3,
             pr: 1
           }}
         >
@@ -233,7 +239,7 @@ function Feed() {
             {feeds.length > 0 ? (
               feeds.map((feed) => (
                 <Card
-                  key={feed.id}
+                  key={feed.feedId}
                   sx={{
                     backgroundColor: '#020617',
                     borderRadius: '18px',
@@ -283,7 +289,7 @@ function Feed() {
                     <CardMedia
                       component="img"
                       height="260"
-                      image={"http://localhost:3010" + feed.imgPath}
+                      image={getImgUrl(feed.imgPath)}
                       alt={feed.imgName}
                       sx={{
                         objectFit: 'cover'
@@ -330,7 +336,7 @@ function Feed() {
           </Box>
         </Box>
 
-        {/* 오른쪽 프로필 카드 영역 (md 이상에서만 보이게) */}
+        {/* 오른쪽 프로필 카드 영역 */}
         <Box
           sx={{
             flex: 1,
@@ -640,7 +646,7 @@ function Feed() {
                 }}
               >
                 <img
-                  src={"http://localhost:3010" + selectedFeed.imgPath}
+                  src={getImgUrl(selectedFeed.imgPath)}
                   alt={selectedFeed.imgName}
                   style={{
                     width: '100%',
@@ -755,7 +761,7 @@ function Feed() {
           <Button
             onClick={() => {
               console.log(selectedFeed);
-              fetch("http://localhost:3010/feed/" + selectedFeed.id, {
+              fetch("http://localhost:3010/feed/" + selectedFeed.feedId, {
                 method: "DELETE",
                 headers: {
                   "Authorization": "Bearer " + localStorage.getItem("token")

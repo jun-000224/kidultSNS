@@ -1,5 +1,5 @@
 // src/components/Menu.js
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Drawer,
   List,
@@ -22,10 +22,13 @@ function Menu() {
   // 사이드 메뉴 전체 너비
   const drawerWidth = 130;
 
-  // 공통 메뉴 스타일
-  const commonItemSx = {
-    py: 0.5,                 // 위아래 패딩
-    px: 1.4,                 // 좌우 패딩
+  // 현재 선택된 메뉴 상태  기본은 홈
+  const [activeMenu, setActiveMenu] = useState('home');
+
+  // 공통 메뉴 스타일  메뉴 키에 따라 활성화 스타일 추가
+  const getItemSx = (key) => ({
+    py: 0.5,
+    px: 1.4,
     justifyContent: 'flex-start',
     borderRadius: '12px',
     mx: 1,
@@ -36,7 +39,7 @@ function Menu() {
     '& .menu-label': {
       opacity: 0,
       maxWidth: 0,
-      whiteSpace: 'nowrap',   // 줄바꿈 방지
+      whiteSpace: 'nowrap',
       overflow: 'hidden',
       transition: 'all 0.2s ease'
     },
@@ -45,8 +48,17 @@ function Menu() {
       opacity: 1,
       maxWidth: 140,
       ml: 1.4
-    }
-  };
+    },
+    // 선택된 메뉴는 항상 호버 상태처럼 유지
+    ...(activeMenu === key && {
+      backgroundColor: '#f3f4f6',
+      '& .menu-label': {
+        opacity: 1,
+        maxWidth: 140,
+        ml: 1.4
+      }
+    })
+  });
 
   return (
     <Drawer
@@ -55,10 +67,10 @@ function Menu() {
         width: drawerWidth,
         flexShrink: 0,
         '& .MuiDrawer-paper': {
-          overflow: 'hidden',          // 스크롤바 제거
+          overflow: 'hidden',
           width: drawerWidth,
           boxSizing: 'border-box',
-          borderRight: 'none',         // 피드와 구분선 제거
+          borderRight: 'none',
           backgroundColor: '#ffffff'
         }
       }}
@@ -107,7 +119,8 @@ function Menu() {
         <ListItemButton
           component={Link}
           to="/feed"
-          sx={commonItemSx}
+          sx={getItemSx('home')}
+          onClick={() => setActiveMenu('home')}
         >
           <ListItemIcon sx={{ minWidth: 0, justifyContent: 'center' }}>
             <HomeOutlinedIcon sx={{ fontSize: 22 }} />
@@ -123,7 +136,8 @@ function Menu() {
         <ListItemButton
           component={Link}
           to="/register"
-          sx={commonItemSx}
+          sx={getItemSx('surf')}
+          onClick={() => setActiveMenu('surf')}
         >
           <ListItemIcon sx={{ minWidth: 0, justifyContent: 'center' }}>
             <SurfingIcon sx={{ fontSize: 22 }} />
@@ -139,7 +153,8 @@ function Menu() {
         <ListItemButton
           component={Link}
           to="#"
-          sx={commonItemSx}
+          sx={getItemSx('search')}
+          onClick={() => setActiveMenu('search')}
         >
           <ListItemIcon sx={{ minWidth: 0, justifyContent: 'center' }}>
             <SearchIcon sx={{ fontSize: 22 }} />
@@ -155,7 +170,8 @@ function Menu() {
         <ListItemButton
           component={Link}
           to="#"
-          sx={commonItemSx}
+          sx={getItemSx('replay')}
+          onClick={() => setActiveMenu('replay')}
         >
           <ListItemIcon sx={{ minWidth: 0, justifyContent: 'center' }}>
             <ReplayIcon sx={{ fontSize: 22 }} />
@@ -171,7 +187,8 @@ function Menu() {
         <ListItemButton
           component={Link}
           to="#"
-          sx={commonItemSx}
+          sx={getItemSx('message')}
+          onClick={() => setActiveMenu('message')}
         >
           <ListItemIcon sx={{ minWidth: 0, justifyContent: 'center' }}>
             <MailOutlineIcon sx={{ fontSize: 22 }} />
@@ -187,7 +204,8 @@ function Menu() {
         <ListItemButton
           component={Link}
           to="#"
-          sx={commonItemSx}
+          sx={getItemSx('alarm')}
+          onClick={() => setActiveMenu('alarm')}
         >
           <ListItemIcon sx={{ minWidth: 0, justifyContent: 'center' }}>
             <FavoriteBorderIcon sx={{ fontSize: 22 }} />
@@ -203,7 +221,8 @@ function Menu() {
         <ListItemButton
           component={Link}
           to="/mypage"
-          sx={commonItemSx}
+          sx={getItemSx('mypage')}
+          onClick={() => setActiveMenu('mypage')}
         >
           <ListItemIcon sx={{ minWidth: 0, justifyContent: 'center' }}>
             <PersonOutlineIcon sx={{ fontSize: 22 }} />
@@ -219,7 +238,8 @@ function Menu() {
         <ListItemButton
           component={Link}
           to="#"
-          sx={commonItemSx}
+          sx={getItemSx('setting')}
+          onClick={() => setActiveMenu('setting')}
         >
           <ListItemIcon sx={{ minWidth: 0, justifyContent: 'center' }}>
             <SettingsOutlinedIcon sx={{ fontSize: 22 }} />

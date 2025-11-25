@@ -36,16 +36,16 @@ router.get("/:userId", async (req, res) => {
             "FROM tbl_feed F " +
             "LEFT JOIN tbl_feed_img I ON F.feedId = I.feedId " +
             "WHERE F.userId = ? " +
-            "ORDER BY F.feedId DESC";
+            "ORDER BY F.cdatetime DESC";
 
         let [rows] = await db.query(sql, [userId]);
 
-        // 피드별로 이미지 묶기
-        let feedMap = {};
+        // feedMap을 일반 객체 {} 대신 Map() 사용
+        let feedMap = new Map();
 
         rows.forEach(row => {
-            if (!feedMap[row.feedId]) {
-                feedMap[row.feedId] = {
+            if (!feedMap.has(row.feedId)) {
+                feedMap.set(row.feedId, {
                     feedId: row.feedId,
                     userId: row.userId,
                     title: row.title,
@@ -54,30 +54,30 @@ router.get("/:userId", async (req, res) => {
                     viewCnt: row.viewCnt,
                     cdatetime: row.cdatetime,
                     udatetime: row.udatetime,
-                    // 첫번째 이미지를 바로 쓰기 위해 별도 필드도 만들어둠
                     imgPath: null,
                     imgName: null,
                     images: []
-                };
+                });
             }
 
+            let feedData = feedMap.get(row.feedId);
+
             if (row.imgId) {
-                // 이미지 배열에 추가
-                feedMap[row.feedId].images.push({
+                feedData.images.push({
                     imgId: row.imgId,
                     imgName: row.imgName,
                     imgPath: row.imgPath
                 });
 
-                // 첫번째 이미지라면 대표 이미지로 세팅
-                if (!feedMap[row.feedId].imgPath) {
-                    feedMap[row.feedId].imgPath = row.imgPath;
-                    feedMap[row.feedId].imgName = row.imgName;
+                if (!feedData.imgPath) {
+                    feedData.imgPath = row.imgPath;
+                    feedData.imgName = row.imgName;
                 }
             }
         });
 
-        let list = Object.values(feedMap);
+        // Map → Array (SQL 정렬 그대로 유지됨)
+        let list = Array.from(feedMap.values());
 
         res.json({
             list,
