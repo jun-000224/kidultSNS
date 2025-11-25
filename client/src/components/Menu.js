@@ -9,10 +9,10 @@ function Menu() {
     <Drawer
       variant="permanent"
       sx={{
-        width: 240, // 너비 설정
+        width: 240,
         flexShrink: 0,
         '& .MuiDrawer-paper': {
-          width: 240, // Drawer 내부의 너비 설정
+          width: 240,
           boxSizing: 'border-box',
         },
       }}
@@ -28,12 +28,14 @@ function Menu() {
           </ListItemIcon>
           <ListItemText primary="피드" />
         </ListItem>
+
         <ListItem button component={Link} to="/register">
           <ListItemIcon>
             <Add />
           </ListItemIcon>
           <ListItemText primary="등록" />
         </ListItem>
+
         <ListItem button component={Link} to="/mypage">
           <ListItemIcon>
             <AccountCircle />
@@ -41,23 +43,16 @@ function Menu() {
           <ListItemText primary="마이페이지" />
         </ListItem>
 
-<<<<<<< HEAD
-        <ListItem button component={Link} to="/Mui">
-=======
+        {/* mui 테스트 페이지 */}
         <ListItem button component={Link} to="/mui">
->>>>>>> b1e27c0d9d7bab1705a5d12686ff62f70746639a
           <ListItemIcon>
             <Home />
           </ListItemIcon>
           <ListItemText primary="mui테스트" />
         </ListItem>
-<<<<<<< HEAD
-=======
-
->>>>>>> b1e27c0d9d7bab1705a5d12686ff62f70746639a
       </List>
     </Drawer>
   );
-};
+}
 
 export default Menu;

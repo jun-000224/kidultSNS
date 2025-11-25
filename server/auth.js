@@ -4,11 +4,7 @@ const JWT_SECRET = 'server_secret_key'; // .env 없이 하드코딩
 module.exports = (req, res, next) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
-<<<<<<< HEAD
 
-=======
-    
->>>>>>> b1e27c0d9d7bab1705a5d12686ff62f70746639a
     if (!token) {
         return res.status(401).json({ message: '인증 토큰 없음', isLogin: false });
     }

@@ -1,9 +1,5 @@
-<<<<<<< HEAD
 import React, { useRef, useState } from 'react';
 import { jwtDecode } from "jwt-decode";
-=======
-import React, { useRef } from 'react';
->>>>>>> b1e27c0d9d7bab1705a5d12686ff62f70746639a
 import {
   TextField,
   Button,
@@ -18,25 +14,16 @@ import {
   IconButton,
 } from '@mui/material';
 import { PhotoCamera } from '@mui/icons-material';
-<<<<<<< HEAD
-import { useNavigate } from 'react-router-dom';   // ✅ 추가
+import { useNavigate } from 'react-router-dom';
 
 function Register() {
   const [files, setFiles] = useState([]);
-  const contentRef = useRef();
-  const navigate = useNavigate();                // ✅ 추가
-=======
-import { jwtDecode } from "jwt-decode";
-
-function Register() {
-  const [files, setFile] = React.useState([]);
-  let contentRef = useRef();
->>>>>>> b1e27c0d9d7bab1705a5d12686ff62f70746639a
+  const contentRef = useRef(null);
+  const navigate = useNavigate();
 
   // 파일 선택
   const handleFileChange = (event) => {
-<<<<<<< HEAD
-    const selectedFiles = Array.from(event.target.files); // FileList → 배열 변환
+    const selectedFiles = Array.from(event.target.files || []); // FileList → 배열 변환
     setFiles(selectedFiles);
   };
 
@@ -93,10 +80,11 @@ function Register() {
       const data = await res.json();
       console.log("feed insert result ===> ", data);
 
+      // 서버에서 { msg: "success", feedId: ... } 형태로 내려온다고 가정
       if (data.msg === "success") {
         await fnUploadFile(data.feedId); // 2) 이미지 업로드
         alert("등록 완료!");
-        navigate("/feed");               // ✅ 여기서 페이지 이동
+        navigate("/feed");
       } else {
         alert("등록 실패");
       }
@@ -104,56 +92,6 @@ function Register() {
       console.error(err);
       alert("서버 통신 중 오류 발생");
     }
-=======
-    setFile(event.target.files);
-  };
-
-  function fnFeedAdd(){
-    if(files.length == 0){
-      alert("이미지를 선택해주세요!");
-      return;
-    }
-    const token = localStorage.getItem("token");
-    const decoded = jwtDecode(token);
-    let param = {
-      content : contentRef.current.value,
-      userId : decoded.userId
-    }
-    fetch("http://localhost:3010/feed", {
-      method : "POST",
-      headers : {
-        "Content-type" : "application/json"
-      },
-      body : JSON.stringify(param)
-    })
-    .then(res => res.json())
-    .then(data => {
-      console.log(data);
-      fnUploadFile(data.result[0].insertId);
-    })
-
-  }
-
-
-  const fnUploadFile = (feedId)=>{
-  const formData = new FormData();
-    for(let i=0; i<files.length; i++){
-      formData.append("file", files[i]); 
-    } 
-    formData.append("feedId", feedId);
-    fetch("http://localhost:3010/feed/upload", {
-      method: "POST",
-      body: formData
-    })
-    .then(res => res.json())
-    .then(data => {
-      console.log(data);
-      // navigate("/feed"); // 원하는 경로
-    })
-    .catch(err => {
-      console.error(err);
-    });
->>>>>>> b1e27c0d9d7bab1705a5d12686ff62f70746639a
   }
 
   return (
@@ -193,7 +131,11 @@ function Register() {
         />
 
         {/* 파일 선택 + 미리보기 */}
-        <Box display="flex" alignItems="center" margin="normal" fullWidth>
+        <Box
+          display="flex"
+          alignItems="center"
+          sx={{ mt: 2, width: '100%' }}
+        >
           <input
             accept="image/*"
             style={{ display: 'none' }}
@@ -207,7 +149,6 @@ function Register() {
               <PhotoCamera />
             </IconButton>
           </label>
-<<<<<<< HEAD
 
           {/* 여러 장 썸네일 */}
           {files.length > 0 && (
@@ -221,21 +162,9 @@ function Register() {
                 />
               ))}
             </Box>
-=======
-          {files.length > 0 && (
-            [...files].map(item => {
-              return <Avatar
-                alt="첨부된 이미지"
-                src={URL.createObjectURL(item)}
-                sx={{ width: 56, height: 56, marginLeft: 2 }}
-              />
-            })
-            
->>>>>>> b1e27c0d9d7bab1705a5d12686ff62f70746639a
           )}
 
           <Typography variant="body1" sx={{ marginLeft: 2 }}>
-<<<<<<< HEAD
             {files.length > 0 ? `${files.length}개 선택됨` : "첨부할 파일 선택"}
           </Typography>
         </Box>
@@ -245,15 +174,8 @@ function Register() {
           variant="contained"
           color="primary"
           fullWidth
-          style={{ marginTop: "20px" }}
+          sx={{ marginTop: '20px' }}
         >
-=======
-            {files.length > 0 ? files[0].name : '첨부할 파일 선택'}
-          </Typography>
-        </Box>
-
-        <Button onClick={fnFeedAdd} variant="contained" color="primary" fullWidth style={{ marginTop: '20px' }}>
->>>>>>> b1e27c0d9d7bab1705a5d12686ff62f70746639a
           등록하기
         </Button>
       </Box>

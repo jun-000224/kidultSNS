@@ -26,17 +26,12 @@ import {
 import CloseIcon from '@mui/icons-material/Close';
 import { jwtDecode } from "jwt-decode";
 import { useNavigate } from 'react-router-dom';
-<<<<<<< HEAD
-=======
-
->>>>>>> b1e27c0d9d7bab1705a5d12686ff62f70746639a
 
 function Feed() {
   const [open, setOpen] = useState(false);
   const [selectedFeed, setSelectedFeed] = useState(null);
   const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState('');
-<<<<<<< HEAD
   const [feeds, setFeeds] = useState([]);
   const navigate = useNavigate();
 
@@ -50,29 +45,10 @@ function Feed() {
           setFeeds(data.list);
           console.log(data);
         });
-=======
-  let [feeds, setFeeds] = useState([]);
-  let navigate = useNavigate();
-  function fnFeeds(){
-    // userId는 일단 하드코딩
-    const token = localStorage.getItem("token");
-    if(token){
-      const decoded = jwtDecode(token);
-      fetch("http://localhost:3010/feed/" + decoded.userId)
-      .then(res => res.json())
-      .then(data => {
-        setFeeds(data.list);
-        console.log(data);
-      })
->>>>>>> b1e27c0d9d7bab1705a5d12686ff62f70746639a
     } else {
       alert("로그인 후 이용해주세요.");
       navigate("/");
     }
-<<<<<<< HEAD
-=======
-    
->>>>>>> b1e27c0d9d7bab1705a5d12686ff62f70746639a
   }
 
   useEffect(() => {
@@ -153,7 +129,7 @@ function Feed() {
             <Typography variant="body1">{selectedFeed?.content}</Typography>
             {selectedFeed?.imgPath && (
               <img
-                src={selectedFeed.imgPath} 
+                src={selectedFeed.imgPath}
                 alt={selectedFeed.imgName}
                 style={{ width: '100%', marginTop: '10px' }}
               />
@@ -190,39 +166,25 @@ function Feed() {
           </Box>
         </DialogContent>
         <DialogActions>
-<<<<<<< HEAD
-          <Button onClick={() => {
-            console.log(selectedFeed);
-            fetch("http://localhost:3010/feed/" + selectedFeed.id, {
-              method: "DELETE",
-              headers: {
-                "Authorization": "Bearer " + localStorage.getItem("token")
-              }
-            })
-              .then(res => res.json())
-              .then(data => {
-                alert("삭제되었습니다!");
-                setOpen(false);
-                fnFeeds();
-              });
-=======
-          <Button onClick={()=>{
-            console.log(selectedFeed);
-            // 삭제 요청하면서 selectedFeed.id를 보낸다
-            fetch("http://localhost:3010/feed/"+selectedFeed.id, {
-                method : "DELETE",
-                headers : {
-                    "Authorization" : "Bearer " + localStorage.getItem("token")
+          <Button
+            onClick={() => {
+              console.log(selectedFeed);
+              fetch("http://localhost:3010/feed/" + selectedFeed.id, {
+                method: "DELETE",
+                headers: {
+                  "Authorization": "Bearer " + localStorage.getItem("token")
                 }
-            })
+              })
                 .then(res => res.json())
                 .then(data => {
-                    alert("삭제되었습니다!");
-                    setOpen(false);
-                    fnFeeds();
-                })
->>>>>>> b1e27c0d9d7bab1705a5d12686ff62f70746639a
-          }} variant='contained' color="primary">
+                  alert("삭제되었습니다!");
+                  setOpen(false);
+                  fnFeeds();
+                });
+            }}
+            variant='contained'
+            color="primary"
+          >
             삭제
           </Button>
           <Button onClick={handleClose} color="primary">
