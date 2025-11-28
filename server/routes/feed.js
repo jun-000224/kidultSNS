@@ -32,15 +32,32 @@ router.get("/:userId", async (req, res) => {
 
     try {
         let sql =
-            "SELECT F.*, I.imgId, I.imgName, I.imgPath " +
+            "SELECT F.*, " +
+            "       I.imgId, I.imgName, I.imgPath, " +
+            "       U.userName, " +
+            "       IFNULL(L.cntLike, 0) AS likeCount, " +   // 좋아요 개수
+            "       IFNULL(UL.liked, 0) AS liked " +        // 내가 누른 여부(0/1)
             "FROM tbl_feed F " +
             "LEFT JOIN tbl_feed_img I ON F.feedId = I.feedId " +
+            "JOIN tbl_user U ON F.userId = U.userId " +
+            "LEFT JOIN ( " +
+            "   SELECT feedId, COUNT(*) AS cntLike " +
+            "   FROM tbl_feed_like " +
+            "   GROUP BY feedId " +
+            ") L ON F.feedId = L.feedId " +
+            "LEFT JOIN ( " +
+            "   SELECT feedId, 1 AS liked " +
+            "   FROM tbl_feed_like " +
+            "   WHERE userId = ? " +
+            ") UL ON F.feedId = UL.feedId " +
             "WHERE F.userId = ? " +
             "ORDER BY F.cdatetime DESC";
 
-        let [rows] = await db.query(sql, [userId]);
+        // 첫 번째 ? -> UL 서브쿼리의 userId (현재 로그인 유저)
+        // 두 번째 ? -> F.userId 조건 (지금은 자기 글 기준 조회)
+        let [rows] = await db.query(sql, [userId, userId]);
 
-        // feedMap을 일반 객체 {} 대신 Map() 사용
+        // feedMap을 Map으로 사용하여 한 피드에 여러 이미지 매핑
         let feedMap = new Map();
 
         rows.forEach(row => {
@@ -48,12 +65,16 @@ router.get("/:userId", async (req, res) => {
                 feedMap.set(row.feedId, {
                     feedId: row.feedId,
                     userId: row.userId,
+                    userName: row.userName,
                     title: row.title,
                     content: row.content,
                     feedType: row.feedType,
                     viewCnt: row.viewCnt,
                     cdatetime: row.cdatetime,
                     udatetime: row.udatetime,
+                    hash: row.hash,                        // 해시태그
+                    likeCount: row.likeCount || 0,         // 좋아요 개수
+                    liked: row.liked === 1,                // boolean 으로 변환
                     imgPath: null,
                     imgName: null,
                     images: []
@@ -62,6 +83,7 @@ router.get("/:userId", async (req, res) => {
 
             let feedData = feedMap.get(row.feedId);
 
+            // 이미지가 있는 경우 이미지 목록에 추가
             if (row.imgId) {
                 feedData.images.push({
                     imgId: row.imgId,
@@ -69,6 +91,7 @@ router.get("/:userId", async (req, res) => {
                     imgPath: row.imgPath
                 });
 
+                // 대표 이미지가 아직 없으면 첫 번째 이미지를 대표로 사용
                 if (!feedData.imgPath) {
                     feedData.imgPath = row.imgPath;
                     feedData.imgName = row.imgName;
@@ -76,7 +99,7 @@ router.get("/:userId", async (req, res) => {
             }
         });
 
-        // Map → Array (SQL 정렬 그대로 유지됨)
+        // Map → Array 변환
         let list = Array.from(feedMap.values());
 
         res.json({
@@ -92,15 +115,15 @@ router.get("/:userId", async (req, res) => {
 
 // 피드 등록 (텍스트만 등록할 때 사용)
 router.post("/", async (req, res) => {
-    let { userId, title, content } = req.body;
+    let { userId, title, content, hash } = req.body;
 
     try {
         let sql = `
-            INSERT INTO tbl_feed (userId, title, content, feedType)
-            VALUES (?, ?, ?, 'NORMAL')
+            INSERT INTO tbl_feed (userId, title, content, feedType, hash)
+            VALUES (?, ?, ?, 'NORMAL', ?)
         `;
 
-        let [result] = await db.query(sql, [userId, title, content]);
+        let [result] = await db.query(sql, [userId, title, content, hash]);
 
         res.json({
             result,
@@ -115,24 +138,24 @@ router.post("/", async (req, res) => {
 });
 
 // 피드 등록 (텍스트 + 이미지 한 번에, 최대 5장)
-// 게시하기 모달에서 multipart 로 보낼 때 사용
 // form-data 예시
 //  userId: 222
 //  title: 제목
 //  content: 내용
+//  hash: #태그1 #태그2 ...
 //  file: 이미지1
 //  file: 이미지2 ...
 router.post("/write", upload.array('file', 5), async (req, res) => {
-    let { userId, title, content } = req.body;
+    let { userId, title, content, hash } = req.body;
     const files = req.files || [];
 
     try {
         // 1. 피드 먼저 저장
         let sql = `
-            INSERT INTO tbl_feed (userId, title, content, feedType)
-            VALUES (?, ?, ?, 'NORMAL')
+            INSERT INTO tbl_feed (userId, title, content, feedType, hash)
+            VALUES (?, ?, ?, 'NORMAL', ?)
         `;
-        let [feedResult] = await db.query(sql, [userId, title, content]);
+        let [feedResult] = await db.query(sql, [userId, title, content, hash]);
         const feedId = feedResult.insertId;
 
         // 2. 이미지가 있으면 이미지 테이블에 저장
@@ -164,7 +187,6 @@ router.post("/write", upload.array('file', 5), async (req, res) => {
 });
 
 // 파일 업로드만 따로 하는 경우
-// 기존 구조 유지, 한 피드에 여러번 호출해도 됨
 router.post('/upload', upload.array('file', 5), async (req, res) => {
     let { feedId } = req.body;
     const files = req.files;
@@ -231,7 +253,6 @@ router.delete("/:feedId", authMiddleware, async (req, res) => {
     let { feedId } = req.params;
 
     try {
-        // FK 에 ON DELETE CASCADE 걸려있으면 아래 한 줄이면 됨
         let sql = "DELETE FROM tbl_feed WHERE feedId = ?";
         await db.query(sql, [feedId]);
 
@@ -245,5 +266,60 @@ router.delete("/:feedId", authMiddleware, async (req, res) => {
         res.status(500).json({ result: "fail" });
     }
 });
+
+
+// 좋아요 토글
+router.post("/:feedId/like", authMiddleware, async (req, res) => {
+    let { feedId } = req.params;
+
+    // 토큰에서 꺼낸 로그인 유저 정보
+    const userId = req.user.userId;
+
+    try {
+        // 1. 이미 좋아요를 눌렀는지 확인
+        let [rows] = await db.query(
+            "SELECT * FROM tbl_feed_like WHERE feedId = ? AND userId = ?",
+            [feedId, userId]
+        );
+
+        let liked;
+
+        if (rows.length > 0) {
+            // 이미 눌렀으면 좋아요 취소
+            await db.query(
+                "DELETE FROM tbl_feed_like WHERE feedId = ? AND userId = ?",
+                [feedId, userId]
+            );
+            liked = false;
+        } else {
+            // 안 눌렀으면 좋아요 추가
+            await db.query(
+                "INSERT INTO tbl_feed_like (feedId, userId) VALUES (?, ?)",
+                [feedId, userId]
+            );
+            liked = true;
+        }
+
+        // 2. 최신 좋아요 개수 다시 조회
+        let [cntRows] = await db.query(
+            "SELECT COUNT(*) AS likeCount FROM tbl_feed_like WHERE feedId = ?",
+            [feedId]
+        );
+
+        const likeCount = cntRows[0]?.likeCount || 0;
+
+        res.json({
+            result: "success",
+            liked: liked,
+            likeCount: likeCount
+        });
+
+    } catch (error) {
+        console.log("like toggle error:", error);
+        res.status(500).json({ result: "fail" });
+    }
+});
+
+
 
 module.exports = router;

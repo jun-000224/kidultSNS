@@ -7,6 +7,7 @@ import Feed from './components/Feed';
 import Register from './components/Register';
 import MyPage from './components/MyPage';
 import Menu from './components/Menu'; // Menu로 변경
+import Setting from './components/setting';
 
 import Mui from './components/Mui';
 function App() {
@@ -25,6 +26,7 @@ function App() {
           <Route path="/register" element={<Register />} />
           <Route path="/mypage" element={<MyPage />} />
           <Route path="/mui" element={<Mui />} />
+          <Route path="/setting" element={<Setting />} />
 
         </Routes>
       </Box>

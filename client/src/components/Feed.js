@@ -21,11 +21,14 @@ import {
   Paper
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
-import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline'; // 댓글 아이콘
-import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';       // 좋아요 아이콘
-import BookmarkBorderIcon from '@mui/icons-material/BookmarkBorder';       // 보관하기 아이콘
+import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline';
+import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
+import BookmarkBorderIcon from '@mui/icons-material/BookmarkBorder';
+import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
+import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
 import { jwtDecode } from 'jwt-decode';
 import { useNavigate } from 'react-router-dom';
+import FavoriteIcon from '@mui/icons-material/Favorite';
 
 function Feed() {
   // 상세 모달 열림 여부
@@ -48,9 +51,66 @@ function Feed() {
   const [writeOpen, setWriteOpen] = useState(false);
   const [writeTitle, setWriteTitle] = useState('');
   const [writeContent, setWriteContent] = useState('');
-  const [writeFiles, setWriteFiles] = useState([]); // 게시 모달에서 선택한 이미지들
+  const [writeHash, setWriteHash] = useState('');
+  const [writeFiles, setWriteFiles] = useState([]);
 
   const navigate = useNavigate();
+
+  // 상단 핫한 피드 카드 목록 (하드코딩 5장)
+  const hotFeedList = [
+    {
+      id: 1,
+      title: '오늘의 핫한 카드를 확인해 보세요!',
+      image: 'http://localhost:3010/uploads/hotCard.png'
+    },
+    {
+      id: 2,
+      title: '키덜트 유저들이 가장 많이 본 피드',
+      image: 'http://localhost:3010/uploads/han_idk.png'
+    },
+    {
+      id: 3,
+      title: '이번 주 인기 급상승 피드',
+      image: 'http://localhost:3010/uploads/hotIssue.png'
+    },
+    {
+      id: 4,
+      title: '도전 욕구를 자극하는 한정판 카드',
+      image: 'http://localhost:3010/uploads/bestSellection.png'
+    },
+    {
+      id: 5,
+      title: '놓치기 아까운 이번 달 베스트 컬렉션',
+      image: 'http://localhost:3010/uploads/dummy1.png'
+    }
+  ];
+
+  // 현재 보여주는 핫 피드 인덱스
+  const [hotIndex, setHotIndex] = useState(0);
+
+  // offset 기준으로 카드 가져오기
+  const getHotCard = (offset) => {
+    if (hotFeedList.length === 0) return null;
+    const len = hotFeedList.length;
+    const index = (hotIndex + offset + len) % len;
+    return hotFeedList[index];
+  };
+
+  // 오른쪽으로 넘기기
+  const handleNextHot = () => {
+    if (hotFeedList.length === 0) return;
+    setHotIndex((prev) => (prev + 1) % hotFeedList.length);
+  };
+
+  // 왼쪽으로 넘기기
+  const handlePrevHot = () => {
+    if (hotFeedList.length === 0) return;
+    setHotIndex((prev) => {
+      const len = hotFeedList.length;
+      return (prev - 1 + len) % len;
+    });
+  };
+
 
   // 피드 목록 조회
   function fnFeeds() {
@@ -62,14 +122,57 @@ function Feed() {
       fetch('http://localhost:3010/feed/' + decoded.userId)
         .then((res) => res.json())
         .then((data) => {
-          setFeeds(data.list);
-          console.log(data);
+          console.log('feed list ==> ', data);
+          const safeList = Array.isArray(data.list)
+            ? data.list.filter((item) => item != null)
+            : [];
+          setFeeds(safeList);
+        })
+        .catch((err) => {
+          console.log(err);
         });
     } else {
       alert('로그인 후 이용해주세요.');
       navigate('/');
     }
   }
+
+  // 좋아요 토글
+  const handleToggleLike = async (feedId) => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        alert('로그인 후 이용해주세요.');
+        return;
+      }
+
+      const res = await fetch(`http://localhost:3010/feed/${feedId}/like`, {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer ' + token
+        }
+      });
+
+      const data = await res.json();
+      console.log('like toggle result ==> ', data);
+
+      if (data.result === 'success') {
+        // 해당 피드의 likeCount, liked만 갱신
+        setFeeds((prev) =>
+          prev.map((f) =>
+            f.feedId === feedId
+              ? { ...f, likeCount: data.likeCount, liked: data.liked }
+              : f
+          )
+        );
+      } else {
+        alert('좋아요 처리 중 오류가 발생했습니다.');
+      }
+    } catch (e) {
+      console.log(e);
+      alert('좋아요 처리 중 오류가 발생했습니다.');
+    }
+  };
 
   // 우측 프로필 카드용 유저 정보 조회
   function fnGetUser() {
@@ -82,6 +185,9 @@ function Feed() {
         .then((data) => {
           console.log('user ==> ', data);
           setUser(data.user);
+        })
+        .catch((err) => {
+          console.log(err);
         });
     }
   }
@@ -96,6 +202,7 @@ function Feed() {
   const handleClickOpen = (feed) => {
     setSelectedFeed(feed);
     setOpen(true);
+
     // 현재는 더미 댓글
     setComments([
       { id: 'user1', text: '멋진 피규어네요.' },
@@ -130,17 +237,18 @@ function Feed() {
     setWriteOpen(false);
     setWriteTitle('');
     setWriteContent('');
+    setWriteHash('');
     setWriteFiles([]);
   };
 
   // 게시 모달에서 이미지 선택
   const handleWriteFileChange = (event) => {
     const selected = Array.from(event.target.files || []);
-    const limited = selected.slice(0, 5); // 최대 5장까지
+    const limited = selected.slice(0, 5);
     setWriteFiles(limited);
   };
 
-  // 게시하기 저장 (텍스트 + 이미지 여러장)
+  // 게시하기 저장
   const handleSubmitWrite = async () => {
     if (!writeContent.trim()) {
       alert('내용을 입력해주세요.');
@@ -160,6 +268,7 @@ function Feed() {
       formData.append('userId', decoded.userId);
       formData.append('title', writeTitle);
       formData.append('content', writeContent);
+      formData.append('hash', writeHash);   // 해시태그 추가
 
       writeFiles.forEach((file) => {
         formData.append('file', file);
@@ -193,6 +302,12 @@ function Feed() {
     return 'http://localhost:3010' + path;
   };
 
+  // 선택된 피드의 닉네임 표시용
+  const getSelectedUserName = () => {
+    if (!selectedFeed) return '키덜트 유저';
+    return selectedFeed.userName || '키덜트 유저';
+  };
+
   return (
     <>
       {/* 메인 레이아웃 영역 */}
@@ -222,172 +337,387 @@ function Feed() {
               pr: 1
             }}
           >
-            {/* 타이틀 영역 */}
-            <Box sx={{ mb: 3 }}>
-              <Typography
-                variant="h6"
-                sx={{ color: '#111827', fontWeight: 700 }}
-              >
-                타임라인
-              </Typography>
-              <Typography variant="body2" sx={{ color: '#6b7280' }}>
-                오늘의 새로운 소식들을 확인해보세요
-              </Typography>
-            </Box>
-
-            {/* 피드 카드 리스트 */}
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-              {feeds.length > 0 ? (
-                feeds.map((feed) => (
-                  // 아바타 + 카드 전체를 감싸는 영역
-                  <Box
-                    key={feed.feedId}
-                    sx={{
-                      cursor: 'pointer',
-                      width: '65%',   // 피드 하나의 전체 가로 크기
-                      mx: 'auto'      // 가운데 정렬
-                    }}
-                    onClick={() => handleClickOpen(feed)}
-                  >
-                    {/* 아바타 + 닉네임 영역 (카드 위) */}
-                    <Box
-                      sx={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        mb: 1,
-                        px: 1
-                      }}
+            {/* 메인 피드 기준 폭(60%) */}
+            <Box
+              sx={{
+                width: '60%',
+                mx: 'auto'
+              }}
+            >
+              {/* 상단 핫한 피드 카드 영역 */}
+              {hotFeedList.length > 0 && (
+                <Box sx={{ mb: 4 }}>
+                  <Box sx={{ mb: 1 }}>
+                    <Typography
+                      variant="subtitle2"
+                      sx={{ fontWeight: 700, color: '#111827' }}
                     >
-                      <Avatar sx={{ bgcolor: '#2563eb' }}>
-                        {feed.userName
-                          ? feed.userName.charAt(0).toUpperCase()
-                          : 'U'}
-                      </Avatar>
-                      <Box sx={{ ml: 1.5 }}>
-                        <Typography
-                          variant="subtitle2"
-                          sx={{ color: '#111827', fontWeight: 600 }}
-                        >
-                          {feed.userName || '키덜트 유저'}
-                        </Typography>
-                        <Typography
-                          variant="caption"
-                          sx={{ color: '#6b7280' }}
-                        >
-                          @{feed.userId}
-                        </Typography>
-                      </Box>
-                    </Box>
+                      오늘의 핫한 카드🔥
+                    </Typography>
+                  </Box>
 
-                    {/* 카드(내용 + 이미지) 영역 */}
-                    <Card
+                  <Box
+                    sx={{
+                      position: 'relative',
+                      height: 170,
+                      width: '100%',
+                      maxWidth: '100%',
+                      mx: 'auto'
+                    }}
+                  >
+                    {/* 왼쪽 화살표 */}
+                    <IconButton
+                      size="small"
+                      onClick={handlePrevHot}
                       sx={{
+                        position: 'absolute',
+                        top: '50%',
+                        left: -10,
+                        transform: 'translateY(-50%)',
+                        zIndex: 10,
                         backgroundColor: '#ffffff',
-                        borderRadius: '16px',
-                        overflow: 'hidden',
-                        boxShadow: '0 4px 16px rgba(15,23,42,0.08)',
                         border: '1px solid #e5e7eb',
-                        display: 'flex',
-                        flexDirection: 'column',
                         '&:hover': {
-                          backgroundColor: '#f9fafb'
+                          backgroundColor: '#f3f4f6'
                         }
                       }}
                     >
-                      {/* 이미지 영역 */}
-                      {feed.imgPath && (
-                        <CardMedia
-                          component="img"
-                          image={getImgUrl(feed.imgPath)}
-                          alt={feed.imgName}
-                          sx={{
-                            width: '100%',
-                            height: 'auto',          // 이미지 비율 유지
-                            objectFit: 'contain',    // 이미지가 잘리지 않도록
-                            borderBottom: '1px solid #e5e7eb',
-                            backgroundColor: '#000000' // 필요 없으면 제거
-                          }}
-                        />
-                      )}
+                      <ArrowBackIosNewIcon sx={{ fontSize: 16 }} />
+                    </IconButton>
 
-                      {/* 내용 영역 */}
-                      <CardContent sx={{ backgroundColor: '#ffffff', pb: 1 }}>
-                        <Typography
-                          variant="body2"
-                          sx={{
-                            color: '#111827',
-                            whiteSpace: 'pre-wrap'
-                          }}
-                        >
-                          {feed.content}
-                        </Typography>
-                      </CardContent>
+                    {/* 오른쪽 화살표 */}
+                    <IconButton
+                      size="small"
+                      onClick={handleNextHot}
+                      sx={{
+                        position: 'absolute',
+                        top: '50%',
+                        right: -10,
+                        transform: 'translateY(-50%)',
+                        zIndex: 10,
+                        backgroundColor: '#ffffff',
+                        border: '1px solid #e5e7eb',
+                        '&:hover': {
+                          backgroundColor: '#f3f4f6'
+                        }
+                      }}
+                    >
+                      <ArrowForwardIosIcon sx={{ fontSize: 16 }} />
+                    </IconButton>
 
-                      {/* 피드 액션 아이콘 영역 (댓글 / 좋아요 / 보관하기) */}
-                      <Box
+                    {/* 왼쪽 미리보기 카드 */}
+                    {getHotCard(-1) && (
+                      <Card
                         sx={{
+                          position: 'absolute',
+                          top: 22,
+                          left: 0,
+                          width: '55%',
+                          height: '80%',
+                          borderRadius: '18px',
+                          backgroundColor: '#f3e8ff',
+                          border: '1px solid #e5e7eb',
+                          boxShadow: '0 6px 18px rgba(15,23,42,0.12)',
+                          zIndex: 1,
                           display: 'flex',
                           alignItems: 'center',
-                          gap: 2.5,
-                          px: 2,
-                          pb: 1.5,
-                          pt: 0.5,
-                          color: '#6b7280'
+                          justifyContent: 'center',
+                          px: 2
                         }}
+                      />
+                    )}
+
+                    {/* 오른쪽 미리보기 카드 */}
+                    {getHotCard(1) && (
+                      <Card
+                        sx={{
+                          opacity: 0.8,
+                          position: 'absolute',
+                          top: 22,
+                          right: 0,
+                          width: '55%',
+                          height: '80%',
+                          borderRadius: '18px',
+                          backgroundColor: '#19042eda',
+                          border: '1px solid #e5e7eb',
+                          boxShadow: '0 6px 18px rgba(30, 54, 112, 0.12)',
+                          zIndex: 1,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          px: 2
+                        }}
+                      />
+                    )}
+
+                    {/* 가운데 메인 카드 */}
+                    {getHotCard(0) && (
+                      <Card
+                        sx={{
+                          position: 'absolute',
+                          top: 0,
+                          left: '50%',
+                          transform: 'translateX(-50%)',
+                          width: '72%',
+                          height: '100%',
+                          borderRadius: '18px',
+                          overflow: 'hidden',
+                          boxShadow: '0 10px 25px rgba(15,23,42,0.20)',
+                          border: '1px solid #e5e7eb',
+                          backgroundColor: '#ffffff',
+                          zIndex: 2,
+                          display: 'flex',
+                          cursor: 'pointer'
+                        }}
+                        onClick={handleNextHot}
                       >
-                        {/* 댓글 아이콘 - 클릭 시 상세 모달(댓글 포함) 열기 */}
-                        <IconButton
-                          size="small"
-                          onClick={(e) => {
-                            e.stopPropagation(); // 카드 전체 클릭 이벤트 막기
-                            handleClickOpen(feed);
-                          }}
-                        >
-                          <ChatBubbleOutlineIcon sx={{ fontSize: 20 }} />
-                        </IconButton>
+                        <Box sx={{ flex: 1.2, p: 2 }}>
+                          <Typography
+                            variant="caption"
+                            sx={{ color: '#6b7280' }}
+                          >
+                            오늘의 추천 카드
+                          </Typography>
+                          <Typography
+                            variant="subtitle1"
+                            sx={{
+                              mt: 1,
+                              fontWeight: 700,
+                              color: '#111827',
+                              lineHeight: 1.4
+                            }}
+                          >
+                            {getHotCard(0).title}
+                          </Typography>
+                        </Box>
 
-                        {/* 좋아요 아이콘 - 나중에 로직 구현, 현재는 클릭만 처리 */}
-                        <IconButton
-                          size="small"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            console.log('like click', feed.feedId);
+                        <Box
+                          sx={{
+                            flex: 1,
+                            borderLeft: '1px dashed #e5e7eb',
+                            backgroundColor: '#f9fafb',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
                           }}
                         >
-                          <FavoriteBorderIcon sx={{ fontSize: 20 }} />
-                        </IconButton>
-
-                        {/* 보관하기 아이콘 - 나중에 로직 구현, 현재는 클릭만 처리 */}
-                        <IconButton
-                          size="small"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            console.log('bookmark click', feed.feedId);
-                          }}
-                        >
-                          <BookmarkBorderIcon sx={{ fontSize: 20 }} />
-                        </IconButton>
-                      </Box>
-                    </Card>
+                          {getHotCard(0).image ? (
+                            <img
+                              src={getHotCard(0).image}
+                              alt={getHotCard(0).title}
+                              style={{
+                                maxWidth: '90%',
+                                maxHeight: '90%',
+                                objectFit: 'contain',
+                                display: 'block'
+                              }}
+                            />
+                          ) : (
+                            <Typography
+                              variant="caption"
+                              style={{ color: '#9ca3af' }}
+                            >
+                              첨부 이미지 없음
+                            </Typography>
+                          )}
+                        </Box>
+                      </Card>
+                    )}
                   </Box>
-                ))
-              ) : (
-                <Box
-                  sx={{
-                    width: '100%',
-                    textAlign: 'center',
-                    color: '#9ca3af',
-                    mt: 6
-                  }}
-                >
-                  <Typography variant="body1">
-                    아직 등록된 피드가 없습니다.
-                  </Typography>
-                  <Typography variant="body2">
-                    첫 번째 키덜트 피드를 업로드해보세요.
-                  </Typography>
                 </Box>
               )}
+
+              {/* 타임라인 타이틀 영역 */}
+              <Box sx={{ mb: 3 }}>
+                <Typography
+                  variant="h6"
+                  sx={{ color: '#111827', fontWeight: 700 }}
+                >
+                  타임라인
+                </Typography>
+                <Typography variant="body2" sx={{ color: '#6b7280' }}>
+                  오늘의 새로운 소식들을 확인해보세요
+                </Typography>
+              </Box>
+
+              {/* 피드 카드 리스트 (중앙 영역) */}
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                {feeds && feeds.length > 0 ? (
+                  feeds
+                    .filter((feed) => feed != null)
+                    .map((feed) => {
+                      const displayName = feed.userName || '키덜트 유저';
+                      const displayInitial = displayName
+                        ? displayName.charAt(0).toUpperCase()
+                        : 'U';
+
+                      return (
+                        <Box
+                          key={feed.feedId}
+                          sx={{
+                            cursor: 'pointer'
+                          }}
+                          onClick={() => handleClickOpen(feed)}
+                        >
+                          {/* 아바타 + 닉네임 영역 */}
+                          <Box
+                            sx={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              mb: 1,
+                              px: 1
+                            }}
+                          >
+                            <Avatar sx={{ bgcolor: '#2563eb' }}>
+                              {displayInitial}
+                            </Avatar>
+                            <Box sx={{ ml: 1.5 }}>
+                              <Typography
+                                variant="subtitle2"
+                                sx={{ color: '#111827', fontWeight: 600 }}
+                              >
+                                {displayName}
+                              </Typography>
+                              <Typography
+                                variant="caption"
+                                sx={{ color: '#6b7280' }}
+                              >
+                                @{feed.userId}
+                              </Typography>
+                            </Box>
+                          </Box>
+
+                          {/* 카드 내용 영역 */}
+                          <Card
+                            sx={{
+                              backgroundColor: '#ffffff',
+                              borderRadius: '16px',
+                              overflow: 'hidden',
+                              boxShadow: '0 4px 16px rgba(15,23,42,0.08)',
+                              border: '1px solid #e5e7eb',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              '&:hover': {
+                                backgroundColor: '#f9fafb'
+                              }
+                            }}
+                          >
+                            {/* 이미지 영역 */}
+                            {feed.imgPath && (
+                              <CardMedia
+                                component="img"
+                                image={getImgUrl(feed.imgPath)}
+                                alt={feed.imgName}
+                                sx={{
+                                  width: '100%',
+                                  height: 400,
+                                  objectFit: 'cover',
+                                  borderBottom: '1px solid #e5e7eb',
+                                  backgroundColor: '#000000'
+                                }}
+                              />
+                            )}
+
+                            {/* 텍스트 + 해시태그 영역 */}
+                            <CardContent
+                              sx={{ backgroundColor: '#ffffff', pb: 1 }}
+                            >
+                              <Typography
+                                variant="body2"
+                                sx={{
+                                  color: '#111827',
+                                  whiteSpace: 'pre-wrap'
+                                }}
+                              >
+                                {feed.content}
+                              </Typography>
+
+                              {feed.hash && (
+                                <Typography
+                                  variant="body2"
+                                  sx={{
+                                    color: '#2563eb',
+                                    mt: 1,
+                                    whiteSpace: 'pre-wrap'
+                                  }}
+                                >
+                                  {feed.hash}
+                                </Typography>
+                              )}
+                            </CardContent>
+
+                            {/* 액션 아이콘 영역 */}
+                            <Box
+                              sx={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 2.5,
+                                px: 2,
+                                pb: 1.5,
+                                pt: 0.5,
+                                color: '#6b7280'
+                              }}
+                            >
+                              {/* 댓글 아이콘 */}
+                              <IconButton
+                                size="small"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleClickOpen(feed);
+                                }}
+                              >
+                                <ChatBubbleOutlineIcon sx={{ fontSize: 20 }} />
+                              </IconButton>
+
+                              {/* 좋아요 아이콘 */}
+                              <IconButton
+                                size="small"
+                                onClick={(e) => {
+                                  e.stopPropagation();          // 카드 클릭 이벤트 막기
+                                  handleToggleLike(feed.feedId);
+                                }}
+                              >
+                                {feed.liked ? (
+                                  <FavoriteIcon sx={{ fontSize: 20, color: '#e11d48' }} />
+                                ) : (
+                                  <FavoriteBorderIcon sx={{ fontSize: 20 }} />
+                                )}
+                              </IconButton>
+
+
+                              {/* 보관하기 아이콘 */}
+                              <IconButton
+                                size="small"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  console.log('bookmark click', feed.feedId);
+                                }}
+                              >
+                                <BookmarkBorderIcon sx={{ fontSize: 20 }} />
+                              </IconButton>
+                            </Box>
+                          </Card>
+                        </Box>
+                      );
+                    })
+                ) : (
+                  <Box
+                    sx={{
+                      width: '100%',
+                      textAlign: 'center',
+                      color: '#9ca3af',
+                      mt: 6
+                    }}
+                  >
+                    <Typography variant="body1">
+                      아직 등록된 피드가 없습니다.
+                    </Typography>
+                    <Typography variant="body2">
+                      첫 번째 키덜트 피드를 업로드해보세요.
+                    </Typography>
+                  </Box>
+                )}
+              </Box>
             </Box>
           </Box>
 
@@ -395,7 +725,7 @@ function Feed() {
           <Box
             sx={{
               flex: 1,
-              maxWidth: 280,
+              maxWidth: 200,
               ml: 2,
               display: { xs: 'none', md: 'block' }
             }}
@@ -434,11 +764,11 @@ function Feed() {
                     : 'http://localhost:3010/uploads/userDefault.png'
                 }
                 sx={{
-                  width: 90,
-                  height: 90,
+                  width: 70,
+                  height: 70,
                   margin: '0 auto',
                   mb: 2,
-                  border: '2px solid #e5e7eb',
+                  border: '2px solid #000000ff',
                   boxSizing: 'border-box'
                 }}
               />
@@ -575,12 +905,21 @@ function Feed() {
               />
 
               <TextField
-                placeholder="무슨 일이 일어나고 있나요?"
+                placeholder="내용을 작성해주세요."
                 fullWidth
                 multiline
                 minRows={3}
                 value={writeContent}
                 onChange={(e) => setWriteContent(e.target.value)}
+                variant="standard"
+              />
+
+              <TextField
+                placeholder="#으로 구분하여 해시태그를 입력해주세요"
+                fullWidth
+                multiline
+                value={writeHash}
+                onChange={(e) => setWriteHash(e.target.value)}
                 variant="standard"
               />
             </Box>
@@ -711,11 +1050,24 @@ function Feed() {
               variant="subtitle1"
               sx={{ fontWeight: 600, mb: 1 }}
             >
-              {selectedFeed?.userName || '키덜트 유저'}
+              {getSelectedUserName()}
             </Typography>
             <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap' }}>
               {selectedFeed?.content}
             </Typography>
+
+            {selectedFeed?.hash && (
+              <Typography
+                variant="body2"
+                sx={{
+                  color: '#2563eb',
+                  mt: 1,
+                  whiteSpace: 'pre-wrap'
+                }}
+              >
+                {selectedFeed.hash}
+              </Typography>
+            )}
           </Box>
 
           {/* 오른쪽 댓글 영역 */}
@@ -810,7 +1162,8 @@ function Feed() {
         >
           <Button
             onClick={() => {
-              console.log(selectedFeed);
+              if (!selectedFeed) return;
+
               fetch('http://localhost:3010/feed/' + selectedFeed.feedId, {
                 method: 'DELETE',
                 headers: {
