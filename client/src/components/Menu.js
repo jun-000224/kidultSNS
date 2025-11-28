@@ -6,7 +6,13 @@ import {
   ListItemButton,
   ListItemIcon,
   ListItemText,
-  Box
+  Box,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Button,
+  IconButton
 } from '@mui/material';
 import HomeOutlinedIcon from '@mui/icons-material/HomeOutlined';
 import SurfingIcon from '@mui/icons-material/Surfing';
@@ -16,16 +22,20 @@ import MailOutlineIcon from '@mui/icons-material/MailOutline';
 import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
+import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import { Link } from 'react-router-dom';
 
 function Menu() {
   // 사이드 메뉴 전체 너비
-  const drawerWidth = 130;
+  const drawerWidth = 170;
 
-  // 현재 선택된 메뉴 상태  기본은 홈
+  // 현재 선택된 메뉴 상태
   const [activeMenu, setActiveMenu] = useState('home');
 
-  // 공통 메뉴 스타일  메뉴 키에 따라 활성화 스타일 추가
+  // 파도타기 도움말 모달 열림 여부
+  const [openSurfHelp, setOpenSurfHelp] = useState(false);
+
+  // 공통 메뉴 스타일
   const getItemSx = (key) => ({
     py: 0.5,
     px: 1.4,
@@ -49,9 +59,9 @@ function Menu() {
       maxWidth: 140,
       ml: 1.4
     },
-    // 선택된 메뉴는 항상 호버 상태처럼 유지
+    // 선택된 메뉴는 항상 호버 상태 유지
     ...(activeMenu === key && {
-      backgroundColor: '#f3f4f6',
+      backgroundColor: '#f3f4f6', //베이스 회색 이걸로
       '& .menu-label': {
         opacity: 1,
         maxWidth: 140,
@@ -79,9 +89,10 @@ function Menu() {
       <Box
         sx={{
           display: 'flex',
-          justifyContent: 'center',
+          // justifyContent: 'center',
           alignItems: 'center',
-          paddingY: 1.5
+          paddingY: 1.5,
+          marginLeft : 2
         }}
       >
         <Box
@@ -110,9 +121,10 @@ function Menu() {
         sx={{
           display: 'flex',
           flexDirection: 'column',
-          gap: 0.3,
+          gap: 3.5, // 아이콘 사이 간격
           overflow: 'hidden',
-          pt: 0.5
+          pt: 0.5,
+          marginTop: 15
         }}
       >
         {/* 홈 */}
@@ -135,18 +147,35 @@ function Menu() {
         {/* 파도타기 */}
         <ListItemButton
           component={Link}
-          to="/register"
+          to="/feed"
           sx={getItemSx('surf')}
           onClick={() => setActiveMenu('surf')}
         >
           <ListItemIcon sx={{ minWidth: 0, justifyContent: 'center' }}>
             <SurfingIcon sx={{ fontSize: 22 }} />
           </ListItemIcon>
-          <ListItemText
-            primary="파도타기"
-            className="menu-label"
-            primaryTypographyProps={{ fontSize: 14, fontWeight: 500 }}
-          />
+
+          {/* 텍스트와 물음표 버튼을 한 줄로 배치 */}
+          <Box sx={{ display: 'flex', alignItems: 'center', flexGrow: 1 }}>
+            <ListItemText
+              primary="파도타기"
+              className="menu-label"
+              primaryTypographyProps={{ fontSize: 14, fontWeight: 500 }}
+            />
+            <IconButton
+              size="small"
+              className="menu-label"
+              // sx={{ ml: 0.1 }}
+              onClick={(e) => {
+                // 메뉴 자체 클릭 이벤트 막기
+                e.preventDefault();
+                e.stopPropagation();
+                setOpenSurfHelp(true);
+              }}
+            >
+              <HelpOutlineIcon sx={{ fontSize: 18 }} />
+            </IconButton>
+          </Box>
         </ListItemButton>
 
         {/* 검색 */}
@@ -251,6 +280,23 @@ function Menu() {
           />
         </ListItemButton>
       </List>
+
+      {/* 파도타기 설명 모달 */}
+      <Dialog
+        open={openSurfHelp}
+        onClose={() => setOpenSurfHelp(false)}
+      >
+        <DialogTitle>🌊파도타기란?</DialogTitle>
+        <DialogContent>
+          모든 게시글을 무작위로 보여줍니다.<br />
+          파도를 타고 취미의 시야를 넓혀보세요!
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenSurfHelp(false)}>
+            닫기
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Drawer>
   );
 }
