@@ -1,16 +1,13 @@
 // server/routes/feed.js
-const express = require('express');
+const express = require("express");
 const router = express.Router();
 const db = require("../db");
 const authMiddleware = require("../auth");
-const multer = require('multer');
-const path = require('path');
-const jwt = require('jsonwebtoken');
-
-const JWT_SECRET = 'server_secret_key';
+const multer = require("multer");
+const path = require("path");
 
 // 업로드 폴더
-const uploadDir = path.join(__dirname, '..', 'uploads');
+const uploadDir = path.join(__dirname, "..", "uploads");
 
 // multer 설정
 const storage = multer.diskStorage({
@@ -20,234 +17,137 @@ const storage = multer.diskStorage({
     filename: (req, file, cb) => {
         const uniqueName = Date.now() + "-" + file.originalname;
         cb(null, uniqueName);
-    }
+    },
 });
 
-// 한 요청당 파일 최대 5장으로 제한
+// 한 요청당 파일 최대 5장 제한
 const upload = multer({
     storage,
-    limits: { files: 5 }
+    limits: { files: 5 },
 });
 
-// -----------------------------
-// 해시태그 / 태그 점수 관련 헬퍼
-// -----------------------------
+// 공통: SELECT 결과 → 피드 리스트로 묶어주는 함수
+function buildFeedList(rows) {
+    const map = new Map();
 
-// 해시태그 문자열에서 태그 배열 뽑기
-function extractTagsFromHash(hashStr) {
-    if (!hashStr) return [];
-    // 공백 / 쉼표 / # / + 기준으로 쪼개고 소문자로 정리
-    return hashStr
-        .split(/[\s,#+]+/g)
-        .map(t => t.trim().toLowerCase())
-        .filter(t => t.length > 0);
-}
+    rows.forEach((row) => {
+        if (!map.has(row.feedId)) {
+            map.set(row.feedId, {
+                feedId: row.feedId,
+                userId: row.userId,
+                userName: row.userName,
+                title: row.title,
+                content: row.content,
+                feedType: row.feedType,
+                viewCnt: row.viewCnt,
+                cdatetime: row.cdatetime,
+                udatetime: row.udatetime,
+                hash: row.hash,
+                likeCount: row.likeCount || 0,
+                liked: row.liked === 1,
+                bookmarkCount: row.bookmarkCount || 0,
+                bookmarked: row.bookmarked === 1,
+                imgPath: null,
+                imgName: null,
+                images: [],
+            });
+        }
 
-// 유저의 태그 점수를 누적시키는 함수
-async function addUserTagScore(userId, hashStr, weight) {
-    if (!userId || !hashStr) return;
+        const feed = map.get(row.feedId);
 
-    const tags = extractTagsFromHash(hashStr);
-    if (tags.length === 0) return;
+        if (row.imgId) {
+            feed.images.push({
+                imgId: row.imgId,
+                imgName: row.imgName,
+                imgPath: row.imgPath,
+            });
 
-    const values = tags.map(() => "(?, ?, ?)").join(",");
-    const params = [];
-    tags.forEach(tag => {
-        params.push(userId, tag, weight);
+            // 대표 이미지 1장
+            if (!feed.imgPath) {
+                feed.imgPath = row.imgPath;
+                feed.imgName = row.imgName;
+            }
+        }
     });
 
-    const sql = `
-        INSERT INTO tbl_user_tag_score (userId, tag, score)
-        VALUES ${values}
-        ON DUPLICATE KEY UPDATE score = score + VALUES(score)
-    `;
-    await db.query(sql, params);
-}
-
-// -----------------------------
-// 요청 헤더에서 토큰 파싱해서 userId 뽑아내는 헬퍼
-// -----------------------------
-function getLoginUserId(req) {
-    const authHeader = req.headers['authorization'] || '';
-    const token = authHeader.split(' ')[1];
-
-    if (!token) return null;
-
-    try {
-        const decoded = jwt.verify(token, JWT_SECRET);
-        return decoded.userId;
-    } catch (e) {
-        console.log('token decode error in feed route:', e.message);
-        return null;
-    }
+    return Array.from(map.values());
 }
 
 /**
- * 피드 목록 조회 (전체 타임라인 + 알고리즘 정렬)
- * - 실제 URL: /feed/feedAll
- * - 로그인 안되어 있어도 동작하지만,
- *   로그인되어 있으면 태그 성향 + 팔로우 + 좋아요 기반으로 정렬
+ * 1) 전체 피드 목록 (알고리즘 정렬된 타임라인)
+ *  - URL: GET /feed/feedAll
+ *  - 헤더에 토큰 필수: Authorization: Bearer xxx
+ *  - 좋아요 수 / 내 좋아요 여부 / 북마크 수 / 내 북마크 여부 포함
  */
-router.get("/feedAll", async (req, res) => {
-    const loginUserId = getLoginUserId(req); // 없으면 null
+router.get("/feedAll", authMiddleware, async (req, res) => {
+    const loginUserId = req.user.userId;
 
     try {
-        // 1) 기본 피드 + 이미지 + 좋아요 수 + 내가 좋아요 눌렀는지
-        let sql =
+        const sql =
             "SELECT F.*, " +
             "       I.imgId, I.imgName, I.imgPath, " +
             "       U.userName, " +
-            "       IFNULL(L.cntLike, 0) AS likeCount, " +   // 좋아요 개수
-            "       IFNULL(UL.liked, 0) AS liked " +        // 내가 누른 여부(0/1)
+            "       IFNULL(L.cntLike, 0) AS likeCount, " +
+            "       IFNULL(UL.liked, 0) AS liked, " +
+            "       IFNULL(B.cntBookmark, 0) AS bookmarkCount, " +
+            "       IFNULL(UB.bookmarked, 0) AS bookmarked " +
             "FROM tbl_feed F " +
             "LEFT JOIN tbl_feed_img I ON F.feedId = I.feedId " +
             "JOIN tbl_user U ON F.userId = U.userId " +
+            // 전체 좋아요 수
             "LEFT JOIN ( " +
             "   SELECT feedId, COUNT(*) AS cntLike " +
             "   FROM tbl_feed_like " +
             "   GROUP BY feedId " +
             ") L ON F.feedId = L.feedId " +
+            // 내가 좋아요 눌렀는지
             "LEFT JOIN ( " +
             "   SELECT feedId, 1 AS liked " +
             "   FROM tbl_feed_like " +
             "   WHERE userId = ? " +
             ") UL ON F.feedId = UL.feedId " +
+            // 전체 북마크 수
+            "LEFT JOIN ( " +
+            "   SELECT feedId, COUNT(*) AS cntBookmark " +
+            "   FROM tbl_feed_bookmark " +
+            "   GROUP BY feedId " +
+            ") B ON F.feedId = B.feedId " +
+            // 내가 북마크 했는지
+            "LEFT JOIN ( " +
+            "   SELECT feedId, 1 AS bookmarked " +
+            "   FROM tbl_feed_bookmark " +
+            "   WHERE userId = ? " +
+            ") UB ON F.feedId = UB.feedId " +
             "ORDER BY F.cdatetime DESC";
 
-        let [rows] = await db.query(sql, [loginUserId || '']);
+        const [rows] = await db.query(sql, [loginUserId, loginUserId]);
+        const list = buildFeedList(rows);
 
-        // 2) feedId 기준으로 이미지 합치기
-        let feedMap = new Map();
-
-        rows.forEach(row => {
-            if (!feedMap.has(row.feedId)) {
-                feedMap.set(row.feedId, {
-                    feedId: row.feedId,
-                    userId: row.userId,
-                    userName: row.userName,
-                    title: row.title,
-                    content: row.content,
-                    feedType: row.feedType,
-                    viewCnt: row.viewCnt,
-                    cdatetime: row.cdatetime,
-                    udatetime: row.udatetime,
-                    hash: row.hash,
-                    likeCount: row.likeCount || 0,
-                    liked: row.liked === 1,   // 0/1 → boolean
-                    imgPath: null,
-                    imgName: null,
-                    images: [],
-                    _score: 0,
-                    _recency: 0
-                });
-            }
-
-            const feedData = feedMap.get(row.feedId);
-
-            if (row.imgId) {
-                feedData.images.push({
-                    imgId: row.imgId,
-                    imgName: row.imgName,
-                    imgPath: row.imgPath
-                });
-
-                if (!feedData.imgPath) {
-                    feedData.imgPath = row.imgPath;
-                    feedData.imgName = row.imgName;
-                }
-            }
-        });
-
-        let list = Array.from(feedMap.values());
-
-        // 로그인 안 되어 있으면 그냥 최신순 그대로 리턴
-        if (!loginUserId) {
-            return res.json({
-                list,
-                result: "success"
-            });
-        }
-
-        // 3) 로그인된 경우 → 내 태그 점수 / 팔로우 목록 불러오기
-
-        // 3-1) 내 태그 점수
-        let [tagRows] = await db.query(
-            "SELECT tag, score FROM tbl_user_tag_score WHERE userId = ?",
-            [loginUserId]
-        );
-        const tagScoreMap = {};
-        tagRows.forEach(r => {
-            tagScoreMap[r.tag] = r.score;
-        });
-
-        // 3-2) 내가 팔로우한 사람 목록
-        let [followRows] = await db.query(
-            "SELECT followingId FROM tbl_follow WHERE followerId = ?",
-            [loginUserId]
-        );
-        const followingSet = new Set(followRows.map(r => r.followingId));
-
-        // 4) 각 피드에 대해 점수 계산
-        list.forEach(feed => {
-            const tags = extractTagsFromHash(feed.hash);
-            let interestScore = 0;
-
-            tags.forEach(t => {
-                interestScore += tagScoreMap[t] || 0;
-            });
-
-            const socialScore = followingSet.has(feed.userId) ? 10 : 0;
-            const likeScore = feed.likeCount || 0;
-
-            const baseScore =
-                interestScore * 2 + // 취향 태그
-                socialScore * 3 +   // 팔로우한 유저의 글이면 강하게 가산
-                likeScore * 1;      // 좋아요 수
-
-            feed._score = baseScore;
-
-            // 최신 글 우선 정렬을 위해 timestamp 저장
-            const time = feed.cdatetime
-                ? new Date(feed.cdatetime).getTime()
-                : 0;
-            feed._recency = time;
-        });
-
-        // 5) 점수순 → 같은 점수면 최신순 정렬
-        list.sort((a, b) => {
-            if (b._score !== a._score) return b._score - a._score;
-            return b._recency - a._recency;
-        });
-
-        res.json({
-            list,
-            result: "success"
-        });
-
-    } catch (error) {
-        console.log("feed list (all) error:", error);
+        res.json({ result: "success", list });
+    } catch (err) {
+        console.log("feedAll error:", err);
         res.status(500).json({ result: "fail", message: "feedAll error" });
     }
 });
 
 /**
- * 피드 검색
- * - 실제 URL: /feed/search
- * - body: { search: "검색어" }
- * - 제목, 내용, 해시태그 기준으로 검색
- * - 토큰 있으면 좋아요 여부 포함, 없어도 검색은 됨
+ * 2) 피드 검색
+ *  - URL: POST /feed/search
+ *  - body: { search: "키워드" }
  */
-router.post("/search", async (req, res) => {
-    const loginUserId = getLoginUserId(req);
+router.post("/search", authMiddleware, async (req, res) => {
+    const loginUserId = req.user.userId;
     const { search } = req.body;
 
     try {
-        let sql =
+        const sql =
             "SELECT F.*, " +
             "       I.imgId, I.imgName, I.imgPath, " +
             "       U.userName, " +
             "       IFNULL(L.cntLike, 0) AS likeCount, " +
-            "       IFNULL(UL.liked, 0) AS liked " +
+            "       IFNULL(UL.liked, 0) AS liked, " +
+            "       IFNULL(B.cntBookmark, 0) AS bookmarkCount, " +
+            "       IFNULL(UB.bookmarked, 0) AS bookmarked " +
             "FROM tbl_feed F " +
             "LEFT JOIN tbl_feed_img I ON F.feedId = I.feedId " +
             "JOIN tbl_user U ON F.userId = U.userId " +
@@ -261,85 +161,55 @@ router.post("/search", async (req, res) => {
             "   FROM tbl_feed_like " +
             "   WHERE userId = ? " +
             ") UL ON F.feedId = UL.feedId " +
+            "LEFT JOIN ( " +
+            "   SELECT feedId, COUNT(*) AS cntBookmark " +
+            "   FROM tbl_feed_bookmark " +
+            "   GROUP BY feedId " +
+            ") B ON F.feedId = B.feedId " +
+            "LEFT JOIN ( " +
+            "   SELECT feedId, 1 AS bookmarked " +
+            "   FROM tbl_feed_bookmark " +
+            "   WHERE userId = ? " +
+            ") UB ON F.feedId = UB.feedId " +
             "WHERE (F.title   LIKE CONCAT('%', ?, '%') " +
             "   OR F.content LIKE CONCAT('%', ?, '%') " +
             "   OR F.hash    LIKE CONCAT('%', ?, '%')) " +
             "ORDER BY F.cdatetime DESC";
 
-        let [rows] = await db.query(sql, [
-            loginUserId || '',
+        const [rows] = await db.query(sql, [
+            loginUserId,
+            loginUserId,
             search,
             search,
-            search
+            search,
         ]);
 
-        let feedMap = new Map();
-
-        rows.forEach(row => {
-            if (!feedMap.has(row.feedId)) {
-                feedMap.set(row.feedId, {
-                    feedId: row.feedId,
-                    userId: row.userId,
-                    userName: row.userName,
-                    title: row.title,
-                    content: row.content,
-                    feedType: row.feedType,
-                    viewCnt: row.viewCnt,
-                    cdatetime: row.cdatetime,
-                    udatetime: row.udatetime,
-                    hash: row.hash,
-                    likeCount: row.likeCount || 0,
-                    liked: row.liked === 1,
-                    imgPath: null,
-                    imgName: null,
-                    images: []
-                });
-            }
-
-            const feedData = feedMap.get(row.feedId);
-
-            if (row.imgId) {
-                feedData.images.push({
-                    imgId: row.imgId,
-                    imgName: row.imgName,
-                    imgPath: row.imgPath
-                });
-
-                if (!feedData.imgPath) {
-                    feedData.imgPath = row.imgPath;
-                    feedData.imgName = row.imgName;
-                }
-            }
-        });
-
-        const list = Array.from(feedMap.values());
-
-        res.json({
-            list,
-            result: "success"
-        });
-
-    } catch (error) {
-        console.log("feed search error:", error);
+        const list = buildFeedList(rows);
+        res.json({ result: "success", list });
+    } catch (err) {
+        console.log("search error:", err);
         res.status(500).json({ result: "fail", message: "search error" });
     }
 });
 
 /**
- * 피드 목록 조회 (유저별)
- * - 실제 URL: /feed/:userId
+ * 3) 내 북마크 피드 목록
+ *  - URL: GET /feed/bookmarks
  */
-router.get("/:userId", async (req, res) => {
-    let { userId } = req.params;
+router.get("/bookmarks", authMiddleware, async (req, res) => {
+    const loginUserId = req.user.userId;
 
     try {
-        let sql =
+        const sql =
             "SELECT F.*, " +
             "       I.imgId, I.imgName, I.imgPath, " +
             "       U.userName, " +
             "       IFNULL(L.cntLike, 0) AS likeCount, " +
-            "       IFNULL(UL.liked, 0) AS liked " +
-            "FROM tbl_feed F " +
+            "       IFNULL(UL.liked, 0) AS liked, " +
+            "       IFNULL(B.cntBookmark, 0) AS bookmarkCount, " +
+            "       1 AS bookmarked " + // 내 북마크 목록이니까 항상 1
+            "FROM tbl_feed_bookmark BK " +
+            "JOIN tbl_feed F ON BK.feedId = F.feedId " +
             "LEFT JOIN tbl_feed_img I ON F.feedId = I.feedId " +
             "JOIN tbl_user U ON F.userId = U.userId " +
             "LEFT JOIN ( " +
@@ -352,224 +222,168 @@ router.get("/:userId", async (req, res) => {
             "   FROM tbl_feed_like " +
             "   WHERE userId = ? " +
             ") UL ON F.feedId = UL.feedId " +
-            "WHERE F.userId = ? " +
-            "ORDER BY F.cdatetime DESC";
+            "LEFT JOIN ( " +
+            "   SELECT feedId, COUNT(*) AS cntBookmark " +
+            "   FROM tbl_feed_bookmark " +
+            "   GROUP BY feedId " +
+            ") B ON F.feedId = B.feedId " +
+            "WHERE BK.userId = ? " +
+            "ORDER BY BK.cdatetime DESC";
 
-        // 여기서는 간단하게, 좋아요 기준 유저도 해당 userId로 둠
-        let [rows] = await db.query(sql, [userId, userId]);
+        const [rows] = await db.query(sql, [loginUserId, loginUserId]);
+        const list = buildFeedList(rows);
 
-        let feedMap = new Map();
+        res.json({ result: "success", list });
+    } catch (err) {
+        console.log("bookmark list error:", err);
+        res.status(500).json({ result: "fail", message: "bookmark list error" });
+    }
+});
 
-        rows.forEach(row => {
-            if (!feedMap.has(row.feedId)) {
-                feedMap.set(row.feedId, {
-                    feedId: row.feedId,
-                    userId: row.userId,
-                    userName: row.userName,
-                    title: row.title,
-                    content: row.content,
-                    feedType: row.feedType,
-                    viewCnt: row.viewCnt,
-                    cdatetime: row.cdatetime,
-                    udatetime: row.udatetime,
-                    hash: row.hash,
-                    likeCount: row.likeCount || 0,
-                    liked: row.liked === 1,
-                    imgPath: null,
-                    imgName: null,
-                    images: []
-                });
-            }
+/**
+ * 4) 피드 등록 (텍스트만)
+ *  - URL: POST /feed
+ */
+router.post("/", async (req, res) => {
+    const { userId, title, content, hash } = req.body;
 
-            const feedData = feedMap.get(row.feedId);
+    try {
+        const sql =
+            "INSERT INTO tbl_feed (userId, title, content, feedType, hash) " +
+            "VALUES (?, ?, ?, 'NORMAL', ?)";
 
-            if (row.imgId) {
-                feedData.images.push({
-                    imgId: row.imgId,
-                    imgName: row.imgName,
-                    imgPath: row.imgPath
-                });
+        const [result] = await db.query(sql, [userId, title, content, hash]);
 
-                if (!feedData.imgPath) {
-                    feedData.imgPath = row.imgPath;
-                    feedData.imgName = row.imgName;
-                }
-            }
-        });
-
-        const list = Array.from(feedMap.values());
-
-        res.json({
-            list,
-            result: "success"
-        });
-
-    } catch (error) {
-        console.log("feed list (user) error:", error);
+        res.json({ result: "success", feedId: result.insertId, msg: "success" });
+    } catch (err) {
+        console.log("feed insert error:", err);
         res.status(500).json({ result: "fail" });
     }
 });
 
-// 피드 등록 (텍스트만)
-router.post("/", async (req, res) => {
-    let { userId, title, content, hash } = req.body;
-
-    try {
-        let sql = `
-            INSERT INTO tbl_feed (userId, title, content, feedType, hash)
-            VALUES (?, ?, ?, 'NORMAL', ?)
-        `;
-
-        let [result] = await db.query(sql, [userId, title, content, hash]);
-
-        // 텍스트만 등록하는 경우에도 태그 점수 반영하고 싶으면 여기도 활성화
-        // await addUserTagScore(userId, hash, 3);
-
-        res.json({
-            result,
-            feedId: result.insertId,
-            msg: "success"
-        });
-
-    } catch (error) {
-        console.log("feed insert error:", error);
-        res.status(500).json({ msg: "fail" });
-    }
-});
-
-// 피드 등록 (텍스트 + 이미지, 최대 5장)
-router.post("/write", upload.array('file', 5), async (req, res) => {
-    let { userId, title, content, hash } = req.body;
+/**
+ * 5) 피드 등록 (텍스트 + 이미지 최대 5장)
+ *  - URL: POST /feed/write
+ */
+router.post("/write", upload.array("file", 5), async (req, res) => {
+    const { userId, title, content, hash } = req.body;
     const files = req.files || [];
 
     try {
         // 1. 피드 저장
-        let sql = `
-            INSERT INTO tbl_feed (userId, title, content, feedType, hash)
-            VALUES (?, ?, ?, 'NORMAL', ?)
-        `;
-        let [feedResult] = await db.query(sql, [userId, title, content, hash]);
+        const sql =
+            "INSERT INTO tbl_feed (userId, title, content, feedType, hash) " +
+            "VALUES (?, ?, ?, 'NORMAL', ?)";
+        const [feedResult] = await db.query(sql, [userId, title, content, hash]);
         const feedId = feedResult.insertId;
 
-        // ✅ 내 태그 성향 점수 반영 (+3)
-        await addUserTagScore(userId, hash, 3);
-
         // 2. 이미지 저장
-        let imgResults = [];
+        const imgResults = [];
+        for (const file of files) {
+            const filename = file.filename;
+            const imgPath = "/uploads/" + filename;
 
-        for (let file of files) {
-            let filename = file.filename;
-            let imgPath = "/uploads/" + filename;
-
-            let query = `
-                INSERT INTO tbl_feed_img (feedId, imgName, imgPath)
-                VALUES (?, ?, ?)
-            `;
-            let [result] = await db.query(query, [feedId, filename, imgPath]);
-            imgResults.push(result);
+            const q =
+                "INSERT INTO tbl_feed_img (feedId, imgName, imgPath) " +
+                "VALUES (?, ?, ?)";
+            const [r] = await db.query(q, [feedId, filename, imgPath]);
+            imgResults.push(r);
         }
 
         res.json({
             result: "success",
-            feedId: feedId,
+            feedId,
             imgResult: imgResults,
-            msg: "등록되었습니다."
+            msg: "등록되었습니다.",
         });
-
-    } catch (error) {
-        console.log("feed write error:", error);
-        res.status(500).json({ msg: "fail" });
+    } catch (err) {
+        console.log("feed write error:", err);
+        res.status(500).json({ result: "fail" });
     }
 });
 
-// 파일 업로드만 따로 하는 경우
-router.post('/upload', upload.array('file', 5), async (req, res) => {
-    let { feedId } = req.body;
-    const files = req.files;
+/**
+ * 6) 이미지 추가 업로드 (기존 피드에)
+ *  - URL: POST /feed/upload
+ */
+router.post("/upload", upload.array("file", 5), async (req, res) => {
+    const { feedId } = req.body;
+    const files = req.files || [];
 
-    if (!feedId || !files || files.length === 0) {
+    if (!feedId || files.length === 0) {
         return res.status(400).json({ msg: "feedId 또는 파일이 없습니다." });
     }
 
     try {
-        let results = [];
+        const results = [];
+        for (const file of files) {
+            const filename = file.filename;
+            const imgPath = "/uploads/" + filename;
 
-        for (let file of files) {
-            let filename = file.filename;
-            let imgPath = "/uploads/" + filename;
-
-            let query = `
-                INSERT INTO tbl_feed_img (feedId, imgName, imgPath)
-                VALUES (?, ?, ?)
-            `;
-
-            let [result] = await db.query(query, [feedId, filename, imgPath]);
-            results.push(result);
+            const q =
+                "INSERT INTO tbl_feed_img (feedId, imgName, imgPath) " +
+                "VALUES (?, ?, ?)";
+            const [r] = await db.query(q, [feedId, filename, imgPath]);
+            results.push(r);
         }
 
-        res.json({
-            message: "success",
-            result: results
-        });
-
+        res.json({ message: "success", result: results });
     } catch (err) {
         console.log("upload error:", err);
-        res.status(500).send("Server Error");
+        res.status(500).json({ msg: "fail" });
     }
 });
 
-// 피드 수정 (제목, 내용만)
+/**
+ * 7) 피드 수정
+ *  - URL: PUT /feed/:feedId
+ */
 router.put("/:feedId", authMiddleware, async (req, res) => {
-    let { feedId } = req.params;
-    let { title, content } = req.body;
+    const { feedId } = req.params;
+    const { title, content } = req.body;
 
     try {
-        let sql = `
-            UPDATE tbl_feed
-            SET title = ?, content = ?, udatetime = NOW()
-            WHERE feedId = ?
-        `;
-        let [result] = await db.query(sql, [title, content, feedId]);
+        const sql =
+            "UPDATE tbl_feed SET title = ?, content = ?, udatetime = NOW() " +
+            "WHERE feedId = ?";
+        const [result] = await db.query(sql, [title, content, feedId]);
 
-        res.json({
-            result: "success",
-            dbResult: result,
-            msg: "수정 완료"
-        });
-
-    } catch (error) {
-        console.log("update error:", error);
+        res.json({ result: "success", dbResult: result, msg: "수정 완료" });
+    } catch (err) {
+        console.log("update error:", err);
         res.status(500).json({ result: "fail" });
     }
 });
 
-// 피드 삭제
+/**
+ * 8) 피드 삭제
+ *  - URL: DELETE /feed/:feedId
+ */
 router.delete("/:feedId", authMiddleware, async (req, res) => {
-    let { feedId } = req.params;
+    const { feedId } = req.params;
 
     try {
-        let sql = "DELETE FROM tbl_feed WHERE feedId = ?";
+        const sql = "DELETE FROM tbl_feed WHERE feedId = ?";
         await db.query(sql, [feedId]);
 
-        res.json({
-            result: "success",
-            msg: "삭제 완료"
-        });
-
-    } catch (error) {
-        console.log("delete error:", error);
+        res.json({ result: "success", msg: "삭제 완료" });
+    } catch (err) {
+        console.log("delete error:", err);
         res.status(500).json({ result: "fail" });
     }
 });
 
-// 좋아요 토글
+/**
+ * 9) 좋아요 토글
+ *  - URL: POST /feed/:feedId/like
+ */
 router.post("/:feedId/like", authMiddleware, async (req, res) => {
-    let { feedId } = req.params;
-    const userId = req.user.userId; // 토큰에서 꺼낸 로그인 유저
+    const { feedId } = req.params;
+    const userId = req.user.userId;
 
     try {
-        // 1. 이미 좋아요 눌렀는지 확인
-        let [rows] = await db.query(
+        // 이미 좋아요 했는지 확인
+        const [rows] = await db.query(
             "SELECT * FROM tbl_feed_like WHERE feedId = ? AND userId = ?",
             [feedId, userId]
         );
@@ -577,47 +391,134 @@ router.post("/:feedId/like", authMiddleware, async (req, res) => {
         let liked;
 
         if (rows.length > 0) {
-            // 눌렀으면 취소
+            // 있으면 삭제
             await db.query(
                 "DELETE FROM tbl_feed_like WHERE feedId = ? AND userId = ?",
                 [feedId, userId]
             );
             liked = false;
-            // 취소할 때 태그 점수까지 줄이고 싶으면 여기서 -1 처리하면 됨
         } else {
-            // 안 눌렀으면 추가
+            // 없으면 추가
             await db.query(
                 "INSERT INTO tbl_feed_like (feedId, userId) VALUES (?, ?)",
                 [feedId, userId]
             );
             liked = true;
-
-            // ✅ 좋아요 누른 글의 해시태그를 내 성향에 +1
-            let [feedRows] = await db.query(
-                "SELECT hash FROM tbl_feed WHERE feedId = ?",
-                [feedId]
-            );
-            if (feedRows.length > 0) {
-                await addUserTagScore(userId, feedRows[0].hash, 1);
-            }
         }
 
-        // 2. 최신 좋아요 개수 조회
-        let [cntRows] = await db.query(
+        // 최신 좋아요 수
+        const [cntRows] = await db.query(
             "SELECT COUNT(*) AS likeCount FROM tbl_feed_like WHERE feedId = ?",
             [feedId]
         );
-
         const likeCount = cntRows[0]?.likeCount || 0;
+
+        res.json({ result: "success", liked, likeCount });
+    } catch (err) {
+        console.log("like toggle error:", err);
+        res.status(500).json({ result: "fail" });
+    }
+});
+
+/**
+ * 10) 북마크 토글
+ *  - URL: POST /feed/:feedId/bookmark
+ */
+router.post("/:feedId/bookmark", authMiddleware, async (req, res) => {
+    const { feedId } = req.params;
+    const userId = req.user.userId;
+
+    try {
+        // 이미 북마크 했는지 확인
+        const [rows] = await db.query(
+            "SELECT * FROM tbl_feed_bookmark WHERE feedId = ? AND userId = ?",
+            [feedId, userId]
+        );
+
+        let bookmarked;
+
+        if (rows.length > 0) {
+            // 있으면 삭제
+            await db.query(
+                "DELETE FROM tbl_feed_bookmark WHERE feedId = ? AND userId = ?",
+                [feedId, userId]
+            );
+            bookmarked = false;
+        } else {
+            // 없으면 추가
+            await db.query(
+                "INSERT INTO tbl_feed_bookmark (feedId, userId) VALUES (?, ?)",
+                [feedId, userId]
+            );
+            bookmarked = true;
+        }
+
+        res.json({ result: "success", bookmarked });
+    } catch (err) {
+        console.log("bookmark toggle error:", err);
+        res.status(500).json({ result: "fail" });
+    }
+});
+
+// 내가 북마크한 피드 목록 조회
+router.get("/bookmark/list", authMiddleware, async (req, res) => {
+    const userId = req.user.userId;
+
+    try {
+        const sql =
+            "SELECT F.*, I.imgId, I.imgName, I.imgPath, U.userName " +
+            "FROM tbl_feed_bookmark B " +
+            "JOIN tbl_feed F ON B.feedId = F.feedId " +
+            "LEFT JOIN tbl_feed_img I ON F.feedId = I.feedId " +
+            "JOIN tbl_user U ON F.userId = U.userId " +
+            "WHERE B.userId = ? " +
+            "ORDER BY B.cdatetime DESC";
+
+        const [rows] = await db.query(sql, [userId]);
+
+        // feedId 중복 제거나 이미지 합치기
+        let feedMap = new Map();
+
+        rows.forEach(row => {
+            if (!feedMap.has(row.feedId)) {
+                feedMap.set(row.feedId, {
+                    feedId: row.feedId,
+                    userId: row.userId,
+                    userName: row.userName,
+                    title: row.title,
+                    content: row.content,
+                    hash: row.hash,
+                    cdatetime: row.cdatetime,
+                    imgPath: null,
+                    imgName: null,
+                    images: []
+                });
+            }
+            const feedData = feedMap.get(row.feedId);
+
+            if (row.imgId) {
+                feedData.images.push({
+                    imgId: row.imgId,
+                    imgName: row.imgName,
+                    imgPath: row.imgPath
+                });
+
+                if (!feedData.imgPath) {
+                    feedData.imgPath = row.imgPath;
+                    feedData.imgName = row.imgName;
+                }
+            }
+        });
+
+        const list = Array.from(feedMap.values());
 
         res.json({
             result: "success",
-            liked: liked,
-            likeCount: likeCount
+            list
         });
 
     } catch (error) {
-        console.log("like toggle error:", error);
+        console.log("bookmark list error:", error);
         res.status(500).json({ result: "fail" });
     }
 });

@@ -17,12 +17,12 @@ import {
 import HomeOutlinedIcon from '@mui/icons-material/HomeOutlined';
 import SurfingIcon from '@mui/icons-material/Surfing';
 import SearchIcon from '@mui/icons-material/Search';
-import ReplayIcon from '@mui/icons-material/Replay';
 import MailOutlineIcon from '@mui/icons-material/MailOutline';
 import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
+import BookmarkBorderIcon from '@mui/icons-material/BookmarkBorder';
 import { Link } from 'react-router-dom';
 
 function Menu() {
@@ -61,7 +61,7 @@ function Menu() {
     },
     // 선택된 메뉴는 항상 호버 상태 유지
     ...(activeMenu === key && {
-      backgroundColor: '#f3f4f6', //베이스 회색 이걸로
+      backgroundColor: '#f3f4f6',
       '& .menu-label': {
         opacity: 1,
         maxWidth: 140,
@@ -89,10 +89,9 @@ function Menu() {
       <Box
         sx={{
           display: 'flex',
-          // justifyContent: 'center',
           alignItems: 'center',
           paddingY: 1.5,
-          marginLeft : 2
+          marginLeft: 2
         }}
       >
         <Box
@@ -121,7 +120,7 @@ function Menu() {
         sx={{
           display: 'flex',
           flexDirection: 'column',
-          gap: 3.5, // 아이콘 사이 간격
+          gap: 3.5,
           overflow: 'hidden',
           pt: 0.5,
           marginTop: 15
@@ -165,9 +164,7 @@ function Menu() {
             <IconButton
               size="small"
               className="menu-label"
-              // sx={{ ml: 0.1 }}
               onClick={(e) => {
-                // 메뉴 자체 클릭 이벤트 막기
                 e.preventDefault();
                 e.stopPropagation();
                 setOpenSurfHelp(true);
@@ -178,8 +175,25 @@ function Menu() {
           </Box>
         </ListItemButton>
 
-        {/* 검색 */}
+        {/* 다시보기(북마크 모아보기) */}
         <ListItemButton
+          component={Link}
+          to="/bookmark"
+          sx={getItemSx('bookmark')}
+          onClick={() => setActiveMenu('bookmark')}
+        >
+          <ListItemIcon sx={{ minWidth: 0, justifyContent: 'center' }}>
+            <BookmarkBorderIcon sx={{ fontSize: 22 }} />
+          </ListItemIcon>
+          <ListItemText
+            primary="다시보기"
+            className="menu-label"
+            primaryTypographyProps={{ fontSize: 14, fontWeight: 500 }}
+          />
+        </ListItemButton>
+
+        {/* 검색 */}
+        {/* <ListItemButton
           component={Link}
           to="#"
           sx={getItemSx('search')}
@@ -193,24 +207,7 @@ function Menu() {
             className="menu-label"
             primaryTypographyProps={{ fontSize: 14, fontWeight: 500 }}
           />
-        </ListItemButton>
-
-        {/* 다시보기 */}
-        <ListItemButton
-          component={Link}
-          to="#"
-          sx={getItemSx('replay')}
-          onClick={() => setActiveMenu('replay')}
-        >
-          <ListItemIcon sx={{ minWidth: 0, justifyContent: 'center' }}>
-            <ReplayIcon sx={{ fontSize: 22 }} />
-          </ListItemIcon>
-          <ListItemText
-            primary="다시보기"
-            className="menu-label"
-            primaryTypographyProps={{ fontSize: 14, fontWeight: 500 }}
-          />
-        </ListItemButton>
+        </ListItemButton> */}
 
         {/* 메시지 */}
         <ListItemButton
@@ -286,9 +283,10 @@ function Menu() {
         open={openSurfHelp}
         onClose={() => setOpenSurfHelp(false)}
       >
-        <DialogTitle>🌊파도타기란?</DialogTitle>
+        <DialogTitle>🌊 파도타기란?</DialogTitle>
         <DialogContent>
-          모든 게시글을 무작위로 보여줍니다.<br />
+          모든 게시글을 무작위로 보여줍니다.
+          <br />
           파도를 타고 취미의 시야를 넓혀보세요!
         </DialogContent>
         <DialogActions>

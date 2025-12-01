@@ -18,19 +18,22 @@ import {
   ListItem,
   ListItemAvatar,
   ListItemText,
+  TextField
 } from '@mui/material';
 import ImageIcon from '@mui/icons-material/Image';
 import ArticleIcon from '@mui/icons-material/Article';
 import { jwtDecode } from "jwt-decode";
 import { useNavigate, useParams } from 'react-router-dom';
 
-// 활동 등급에 따른 테두리 색 결정
-function getRankBorderColor(feedCnt) {
-  if (!feedCnt || feedCnt < 10) return '#000000ff';     // 기본 검정
-  if (feedCnt < 20) return '#cd7f32';                   // 브론즈
-  if (feedCnt < 30) return '#c0c0c0';                   // 실버
-  if (feedCnt < 40) return '#ffd700';                   // 골드
-  return '#38bdf8';                                     // 다이아 느낌 나는 하늘색
+// 활동 등급에 따른 프로필 테두리 색상
+function getGradeBorderColor(feedCnt) {
+  const count = feedCnt || 0;
+
+  if (count >= 40) return '#38bdf8';   // 다이아
+  if (count >= 30) return '#facc15';   // 골드
+  if (count >= 20) return '#e5e7eb';   // 실버
+  if (count >= 10) return '#b45309';   // 브론즈
+  return '#111827';                    // 기본(블랙)
 }
 
 function MyPage() {
@@ -58,6 +61,12 @@ function MyPage() {
   const [openFollowing, setOpenFollowing] = useState(false);
   const [followers, setFollowers] = useState([]);
   const [following, setFollowing] = useState([]);
+
+  // 프로필 수정 모달 상태
+  const [openProfileEdit, setOpenProfileEdit] = useState(false);
+  const [editUserName, setEditUserName] = useState('');
+  const [profileFile, setProfileFile] = useState(null);
+  const [profilePreview, setProfilePreview] = useState(null);
 
   const navigate = useNavigate();
 
@@ -97,8 +106,12 @@ function MyPage() {
 
   useEffect(() => {
     fnGetUser();
-    // paramUserId 바뀔 때마다 다시 조회
   }, [paramUserId]);
+
+  // 활동 횟수 (등급 계산용)
+  const activityCount = user?.feedCnt ?? feeds.length;
+  const gradeBorderColor = getGradeBorderColor(activityCount);
+  const canChangeProfileImage = activityCount >= 10; // 브론즈 이상이면 true
 
   // 보기 타입에 따라 피드 필터링
   const filteredFeeds = feeds.filter((feed) => {
@@ -110,11 +123,6 @@ function MyPage() {
       return !feed.imgPath;
     }
   });
-
-  // 이 유저의 전체 작성글 수
-  const feedCount = user?.feedCnt ?? feeds.length ?? 0;
-  // 활동 등급에 따른 프로필 테두리 색
-  const profileBorderColor = getRankBorderColor(feedCount);
 
   // 팔로우 토글
   const handleToggleFollow = async () => {
@@ -177,6 +185,88 @@ function MyPage() {
       .catch(err => console.log(err));
   };
 
+  // 프로필 수정 모달 열기
+  const handleOpenProfileEdit = () => {
+    if (!user) return;
+    setEditUserName(user.userName || '');
+    setProfileFile(null);
+    setProfilePreview(
+      user.profileImgPath
+        ? "http://localhost:3010" + user.profileImgPath
+        : null
+    );
+    setOpenProfileEdit(true);
+  };
+
+  // 프로필 수정 모달 닫기
+  const handleCloseProfileEdit = () => {
+    setOpenProfileEdit(false);
+    setProfileFile(null);
+    setProfilePreview(null);
+  };
+
+  // 프로필 이미지 선택
+  const handleProfileFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setProfileFile(file);
+    setProfilePreview(URL.createObjectURL(file));
+  };
+
+  // 프로필 수정 저장
+  const handleSaveProfile = async () => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      alert("로그인 후 이용해주세요.");
+      navigate("/");
+      return;
+    }
+
+    if (!editUserName.trim()) {
+      alert("닉네임을 입력해주세요.");
+      return;
+    }
+
+    try {
+      const formData = new FormData();
+      formData.append("userName", editUserName.trim());
+
+      // 브론즈 이상 + 파일 선택 했으면 프로필 이미지도 전송
+      if (canChangeProfileImage && profileFile) {
+        formData.append("profileImg", profileFile);
+      }
+
+      const res = await fetch("http://localhost:3010/user/profile", {
+        method: "PUT",
+        headers: {
+          Authorization: "Bearer " + token
+        },
+        body: formData
+      });
+
+      const data = await res.json();
+      console.log("profile update ==> ", data);
+
+      if (data.result === "success") {
+        alert("프로필이 수정되었습니다.");
+
+        // 화면의 user 상태 갱신
+        setUser(prev => prev ? {
+          ...prev,
+          userName: data.user?.userName || editUserName.trim(),
+          profileImgPath: data.user?.profileImgPath ?? prev.profileImgPath
+        } : prev);
+
+        handleCloseProfileEdit();
+      } else {
+        alert(data.message || "프로필 수정 중 오류가 발생했습니다.");
+      }
+    } catch (e) {
+      console.log(e);
+      alert("프로필 수정 중 오류가 발생했습니다.");
+    }
+  };
+
   return (
     <Box
       sx={{
@@ -208,7 +298,7 @@ function MyPage() {
                 columnGap: 4
               }}
             >
-              {/* 프로필 이미지 (활동등급 테두리 색 적용) */}
+              {/* 프로필 이미지 */}
               <Avatar
                 alt="프로필 이미지"
                 src={
@@ -219,13 +309,13 @@ function MyPage() {
                 sx={{
                   width: 80,
                   height: 80,
-                  border: `3px solid ${profileBorderColor}`,
+                  border: `2px solid ${gradeBorderColor}`,
                   boxSizing: "border-box",
                   flexShrink: 0
                 }}
               />
 
-              {/* 이름, 아이디, 소개 + (남의 페이지일 때) 팔로우 버튼 */}
+              {/* 이름, 아이디, 소개 + (남의 페이지일 때) 팔로우 버튼 / (내 페이지일 때) 프로필 수정 버튼 */}
               <Box sx={{ flex: 1 }}>
                 <Box
                   sx={{
@@ -257,6 +347,22 @@ function MyPage() {
                       {isFollowing ? "팔로우 취소" : "팔로우 하기"}
                     </Button>
                   )}
+
+                  {/* 내 마이페이지일 때만 프로필 수정 버튼 노출 */}
+                  {isMyPage && (
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      onClick={handleOpenProfileEdit}
+                      sx={{
+                        textTransform: "none",
+                        borderRadius: "999px",
+                        ml: 2
+                      }}
+                    >
+                      프로필 수정
+                    </Button>
+                  )}
                 </Box>
 
                 <Typography variant="subtitle2" sx={{ mb: 0.5 }}>
@@ -265,6 +371,15 @@ function MyPage() {
                 <Typography variant="body2" color="text.secondary">
                   {user?.intro || "간단한 소개글을 작성해보세요."}
                 </Typography>
+
+                {isMyPage && (
+                  <Typography
+                    variant="caption"
+                    sx={{ mt: 0.5, display: 'block', color: '#6b7280' }}
+                  >
+                    활동 글 {activityCount}개 · {activityCount >= 10 ? '브론즈 이상 등급입니다.' : '10개 이상 작성 시 프로필 사진을 직접 등록할 수 있어요.'}
+                  </Typography>
+                )}
               </Box>
 
               {/* 팔로워 / 팔로잉 / 게시물 요약 */}
@@ -510,6 +625,78 @@ function MyPage() {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setOpenFollowing(false)}>닫기</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* ✅ 프로필 수정 모달 */}
+      <Dialog
+        open={openProfileEdit}
+        onClose={handleCloseProfileEdit}
+        fullWidth
+        maxWidth="xs"
+      >
+        <DialogTitle>프로필 수정</DialogTitle>
+        <DialogContent dividers>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {/* 닉네임 */}
+            <TextField
+              label="닉네임"
+              fullWidth
+              value={editUserName}
+              onChange={(e) => setEditUserName(e.target.value)}
+            />
+
+            {/* 프로필 이미지 업로드 영역 */}
+            <Box>
+              <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                프로필 이미지
+              </Typography>
+
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                <Avatar
+                  src={
+                    profilePreview ||
+                    (user?.profileImgPath
+                      ? "http://localhost:3010" + user.profileImgPath
+                      : "http://localhost:3010/uploads/userDefault.png")
+                  }
+                  sx={{ width: 60, height: 60 }}
+                />
+
+                <Box>
+                  <Button
+                    component="label"
+                    variant="outlined"
+                    size="small"
+                    disabled={!canChangeProfileImage}
+                    sx={{ textTransform: 'none', borderRadius: '999px' }}
+                  >
+                    이미지 선택
+                    <input
+                      type="file"
+                      hidden
+                      accept="image/*"
+                      onChange={handleProfileFileChange}
+                    />
+                  </Button>
+                  <Typography
+                    variant="caption"
+                    sx={{ display: 'block', mt: 0.5, color: '#6b7280' }}
+                  >
+                    {canChangeProfileImage
+                      ? '프로필 사진을 변경할 수 있습니다.'
+                      : '작성 글 10개 이상(브론즈 등급)부터 프로필 사진을 등록할 수 있어요.'}
+                  </Typography>
+                </Box>
+              </Box>
+            </Box>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseProfileEdit}>취소</Button>
+          <Button variant="contained" onClick={handleSaveProfile}>
+            저장
+          </Button>
         </DialogActions>
       </Dialog>
     </Box>

@@ -27,6 +27,7 @@ import BookmarkBorderIcon from '@mui/icons-material/BookmarkBorder';
 import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
 import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
 import FavoriteIcon from '@mui/icons-material/Favorite';
+import BookmarkIcon from '@mui/icons-material/Bookmark';
 import { jwtDecode } from 'jwt-decode';
 import { useNavigate, useLocation } from 'react-router-dom';
 
@@ -222,6 +223,43 @@ function Feed() {
     } catch (e) {
       console.log(e);
       alert('좋아요 처리 중 오류가 발생했습니다.');
+    }
+  };
+
+  // 북마크 토글
+  const handleToggleBookmark = async (feedId) => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        alert('로그인 후 이용해주세요.');
+        return;
+      }
+
+      const res = await fetch(
+        `http://localhost:3010/bookmark/toggle/${feedId}`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: 'Bearer ' + token
+          }
+        }
+      );
+
+      const data = await res.json();
+      console.log('bookmark toggle result ==> ', data);
+
+      if (data.result === 'success') {
+        setFeeds((prev) =>
+          prev.map((f) =>
+            f.feedId === feedId ? { ...f, bookmarked: data.bookmarked } : f
+          )
+        );
+      } else {
+        alert('북마크 처리 중 오류가 발생했습니다.');
+      }
+    } catch (e) {
+      console.log(e);
+      alert('북마크 처리 중 오류가 발생했습니다.');
     }
   };
 
@@ -889,10 +927,16 @@ function Feed() {
                                 size="small"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  console.log('bookmark click', feed.feedId);
+                                  handleToggleBookmark(feed.feedId);
                                 }}
                               >
-                                <BookmarkBorderIcon sx={{ fontSize: 20 }} />
+                                {feed.bookmarked ? (
+                                  <BookmarkIcon
+                                    sx={{ fontSize: 20, color: '#0ea5e9' }}
+                                  />
+                                ) : (
+                                  <BookmarkBorderIcon sx={{ fontSize: 20 }} />
+                                )}
                               </IconButton>
                             </Box>
                           </Card>

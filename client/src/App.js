@@ -10,6 +10,7 @@ import MyPage from './components/MyPage';
 import Menu from './components/Menu';
 import Setting from './components/setting';
 import Mui from './components/Mui';
+import BookmarkFeed from './components/BookmarkFeed';
 
 function App() {
   const location = useLocation();
@@ -38,6 +39,9 @@ function App() {
 
           <Route path="/mui" element={<Mui />} />
           <Route path="/setting" element={<Setting />} />
+
+          <Route path="/bookmark" element={<BookmarkFeed />} />
+
         </Routes>
       </Box>
     </Box>

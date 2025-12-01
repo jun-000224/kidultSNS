@@ -301,4 +301,98 @@ router.post("/login", async (req, res) => {
     }
 });
 
+const path = require('path');
+const multer = require('multer');
+
+// 업로드 폴더 (feed.js에서 쓰던 uploads랑 동일 위치로 맞추면 편함)
+const uploadDir = path.join(__dirname, '..', 'uploads');
+
+const profileStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueName = Date.now() + '-' + file.originalname;
+    cb(null, uniqueName);
+  }
+});
+
+const uploadProfile = multer({ storage: profileStorage });
+
+/**
+ * 프로필 수정
+ * PUT /user/profile
+ * - body(form-data): userName (필수), profileImg (파일, 선택)
+ * - 조건: 작성글 수 10개 이상일 때만 프로필 이미지 변경 허용
+ */
+router.put('/profile', authMiddleware, uploadProfile.single('profileImg'), async (req, res) => {
+  const userId = req.user.userId;
+  const { userName } = req.body;
+  const file = req.file;
+
+  if (!userName || !userName.trim()) {
+    return res.status(400).json({
+      result: 'fail',
+      message: '닉네임은 필수입니다.'
+    });
+  }
+
+  try {
+    // 활동 글 수 확인 (브론즈 이상 체크)
+    const [rows] = await db.query(
+      'SELECT feedCnt FROM tbl_user WHERE userId = ?',
+      [userId]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({
+        result: 'fail',
+        message: '존재하지 않는 유저입니다.'
+      });
+    }
+
+    const feedCnt = rows[0].feedCnt || 0;
+    const canChangeProfileImage = feedCnt >= 10;
+
+    let profileImgPath = null;
+
+    if (file && canChangeProfileImage) {
+      profileImgPath = '/uploads/' + file.filename;
+    }
+
+    // 업데이트 쿼리 구성
+    let sql = 'UPDATE tbl_user SET userName = ?';
+    const params = [userName.trim()];
+
+    if (profileImgPath) {
+      sql += ', profileImgPath = ?';
+      params.push(profileImgPath);
+    }
+
+    sql += ' WHERE userId = ?';
+    params.push(userId);
+
+    await db.query(sql, params);
+
+    // 수정 후 최신 정보 다시 조회해서 보내줌
+    const [userRows] = await db.query(
+      'SELECT userId, userName, intro, profileImgPath, feedCnt, follower, following FROM tbl_user WHERE userId = ?',
+      [userId]
+    );
+
+    const updatedUser = userRows[0];
+
+    return res.json({
+      result: 'success',
+      user: updatedUser
+    });
+  } catch (err) {
+    console.log('profile update error:', err);
+    return res.status(500).json({
+      result: 'fail',
+      message: 'profile update error'
+    });
+  }
+});
+
 module.exports = router;
