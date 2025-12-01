@@ -9,48 +9,96 @@ import {
   Card,
   CardMedia,
   CardContent,
-  Button,          // 버튼 추가
+  Button,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  List,
+  ListItem,
+  ListItemAvatar,
+  ListItemText,
 } from '@mui/material';
-import ImageIcon from '@mui/icons-material/Image';     // 아이콘 추가
-import ArticleIcon from '@mui/icons-material/Article'; // 아이콘 추가
+import ImageIcon from '@mui/icons-material/Image';
+import ArticleIcon from '@mui/icons-material/Article';
 import { jwtDecode } from "jwt-decode";
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
+
+// 활동 등급에 따른 테두리 색 결정
+function getRankBorderColor(feedCnt) {
+  if (!feedCnt || feedCnt < 10) return '#000000ff';     // 기본 검정
+  if (feedCnt < 20) return '#cd7f32';                   // 브론즈
+  if (feedCnt < 30) return '#c0c0c0';                   // 실버
+  if (feedCnt < 40) return '#ffd700';                   // 골드
+  return '#38bdf8';                                     // 다이아 느낌 나는 하늘색
+}
 
 function MyPage() {
-  // 유저 정보
-  let [user, setUser] = useState();
-  // 유저 게시물 목록
-  let [feeds, setFeeds] = useState([]);
-  // 사진 / 텍스트 보기 구분
-  let [viewType, setViewType] = useState('image'); // 기본값: 사진
+  // URL 파라미터 (다른 유저 페이지면 값이 있음)
+  const { userId: paramUserId } = useParams();
 
-  let navigate = useNavigate();
+  // 로그인 유저 ID
+  const [loginUserId, setLoginUserId] = useState(null);
+
+  // 현재 페이지의 주인 유저 정보
+  const [user, setUser] = useState();
+  // 유저 게시물 목록
+  const [feeds, setFeeds] = useState([]);
+  // 사진 / 텍스트 보기 구분
+  const [viewType, setViewType] = useState('image'); // 기본값: 사진
+
+  // 내 페이지인지, 남의 페이지인지
+  const [isMyPage, setIsMyPage] = useState(false);
+
+  // 내가 이 유저를 팔로우 중인지
+  const [isFollowing, setIsFollowing] = useState(false);
+
+  // 팔로워 / 팔로잉 모달 상태 + 리스트
+  const [openFollowers, setOpenFollowers] = useState(false);
+  const [openFollowing, setOpenFollowing] = useState(false);
+  const [followers, setFollowers] = useState([]);
+  const [following, setFollowing] = useState([]);
+
+  const navigate = useNavigate();
 
   // 유저 정보와 게시물 조회
   function fnGetUser() {
     const token = localStorage.getItem("token");
 
-    if (token) {
-      const decoded = jwtDecode(token);
-
-      fetch("http://localhost:3010/user/" + decoded.userId)
-        .then(res => res.json())
-        .then(data => {
-          setUser(data.user);
-          setFeeds(data.feeds || []);
-        })
-        .catch(err => {
-          console.log(err);
-        });
-    } else {
+    if (!token) {
       alert("로그인 후 이용해주세요.");
       navigate("/");
+      return;
     }
+
+    const decoded = jwtDecode(token);
+    const loginId = decoded.userId;
+    setLoginUserId(loginId);
+
+    // URL 이 /user/:userId 이면 그 아이디, 아니면 내 아이디
+    const targetUserId = paramUserId || loginId;
+    setIsMyPage(targetUserId === loginId);
+
+    fetch("http://localhost:3010/user/" + targetUserId, {
+      headers: {
+        Authorization: "Bearer " + token
+      }
+    })
+      .then(res => res.json())
+      .then(data => {
+        setUser(data.user);
+        setFeeds(data.feeds || []);
+        setIsFollowing(data.isFollowing || false);
+      })
+      .catch(err => {
+        console.log(err);
+      });
   }
 
   useEffect(() => {
     fnGetUser();
-  }, []);
+    // paramUserId 바뀔 때마다 다시 조회
+  }, [paramUserId]);
 
   // 보기 타입에 따라 피드 필터링
   const filteredFeeds = feeds.filter((feed) => {
@@ -62,6 +110,72 @@ function MyPage() {
       return !feed.imgPath;
     }
   });
+
+  // 이 유저의 전체 작성글 수
+  const feedCount = user?.feedCnt ?? feeds.length ?? 0;
+  // 활동 등급에 따른 프로필 테두리 색
+  const profileBorderColor = getRankBorderColor(feedCount);
+
+  // 팔로우 토글
+  const handleToggleFollow = async () => {
+    if (!user) return;
+
+    const token = localStorage.getItem("token");
+    if (!token) {
+      alert("로그인 후 이용해주세요.");
+      navigate("/");
+      return;
+    }
+
+    try {
+      const res = await fetch(
+        "http://localhost:3010/user/" + user.userId + "/follow",
+        {
+          method: "POST",
+          headers: {
+            Authorization: "Bearer " + token
+          }
+        }
+      );
+
+      const data = await res.json();
+      if (data.result === "success") {
+        setIsFollowing(data.isFollowing);
+        setUser(prev =>
+          prev ? { ...prev, follower: data.followerCount } : prev
+        );
+      } else {
+        alert("팔로우 처리 중 오류가 발생했습니다.");
+      }
+    } catch (e) {
+      console.log(e);
+      alert("팔로우 처리 중 오류가 발생했습니다.");
+    }
+  };
+
+  // 팔로워 목록 조회
+  const fetchFollowers = () => {
+    if (!user) return;
+    fetch(`http://localhost:3010/user/${user.userId}/followers`)
+      .then(res => res.json())
+      .then(data => {
+        setFollowers(data.list || []);
+        setOpenFollowers(true);
+      })
+      .catch(err => console.log(err));
+  };
+
+  // 팔로잉 목록 조회
+  const fetchFollowing = () => {
+    if (!user) return;
+    fetch(`http://localhost:3010/user/${user.userId}/following`)
+      .then(res => res.json())
+      .then(data => {
+        setFollowing(data.list || []);
+        setOpenFollowing(true);
+      })
+      .catch(err => console.log(err));
+  };
 
   return (
     <Box
@@ -77,7 +191,7 @@ function MyPage() {
           flexDirection="column"
           alignItems="center"
         >
-          {/* 상단 프로필 헤더 영역 (기준 코드 그대로) */}
+          {/* 상단 프로필 헤더 영역 */}
           <Box
             sx={{
               width: "100%",
@@ -94,7 +208,7 @@ function MyPage() {
                 columnGap: 4
               }}
             >
-              {/* 프로필 이미지 */}
+              {/* 프로필 이미지 (활동등급 테두리 색 적용) */}
               <Avatar
                 alt="프로필 이미지"
                 src={
@@ -105,21 +219,44 @@ function MyPage() {
                 sx={{
                   width: 80,
                   height: 80,
-                  border: "2px solid #000000ff",
+                  border: `3px solid ${profileBorderColor}`,
                   boxSizing: "border-box",
                   flexShrink: 0
                 }}
               />
 
-              {/* 이름, 아이디, 소개 */}
+              {/* 이름, 아이디, 소개 + (남의 페이지일 때) 팔로우 버튼 */}
               <Box sx={{ flex: 1 }}>
-                <Box sx={{ display: "flex", alignItems: "center", columnGap: 2, mb: 1 }}>
+                <Box
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    columnGap: 2,
+                    mb: 1
+                  }}
+                >
                   <Typography variant="h5" sx={{ fontWeight: 600 }}>
                     {user?.userName}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
                     @{user?.userId}
                   </Typography>
+
+                  {/* 남의 마이페이지일 때만 팔로우 버튼 노출 */}
+                  {!isMyPage && user && (
+                    <Button
+                      variant={isFollowing ? "outlined" : "contained"}
+                      size="small"
+                      onClick={handleToggleFollow}
+                      sx={{
+                        textTransform: "none",
+                        borderRadius: "999px",
+                        ml: 2
+                      }}
+                    >
+                      {isFollowing ? "팔로우 취소" : "팔로우 하기"}
+                    </Button>
+                  )}
                 </Box>
 
                 <Typography variant="subtitle2" sx={{ mb: 0.5 }}>
@@ -139,7 +276,10 @@ function MyPage() {
                   ml: 2
                 }}
               >
-                <Box sx={{ textAlign: "center" }}>
+                <Box
+                  sx={{ textAlign: "center", cursor: "pointer" }}
+                  onClick={fetchFollowers}
+                >
                   <Typography variant="subtitle2" color="text.secondary">
                     팔로워
                   </Typography>
@@ -147,7 +287,10 @@ function MyPage() {
                     {user?.follower ?? 0}
                   </Typography>
                 </Box>
-                <Box sx={{ textAlign: "center" }}>
+                <Box
+                  sx={{ textAlign: "center", cursor: "pointer" }}
+                  onClick={fetchFollowing}
+                >
                   <Typography variant="subtitle2" color="text.secondary">
                     팔로잉
                   </Typography>
@@ -167,7 +310,7 @@ function MyPage() {
             </Box>
           </Box>
 
-          {/* 여기부터 추가: 사진 / 텍스트 토글 버튼 */}
+          {/* 사진 / 텍스트 토글 버튼 */}
           <Box
             sx={{
               width: "100%",
@@ -277,6 +420,98 @@ function MyPage() {
           </Box>
         </Box>
       </Container>
+
+      {/* 팔로워 리스트 모달 */}
+      <Dialog
+        open={openFollowers}
+        onClose={() => setOpenFollowers(false)}
+        fullWidth
+        maxWidth="xs"
+      >
+        <DialogTitle>팔로워</DialogTitle>
+        <DialogContent dividers>
+          {followers.length === 0 && (
+            <Typography variant="body2" color="text.secondary">
+              아직 팔로워가 없습니다.
+            </Typography>
+          )}
+          <List>
+            {followers.map((u) => (
+              <ListItem
+                button
+                key={u.userId}
+                onClick={() => {
+                  setOpenFollowers(false);
+                  navigate("/user/" + u.userId);
+                }}
+              >
+                <ListItemAvatar>
+                  <Avatar
+                    src={
+                      u.profileImgPath
+                        ? "http://localhost:3010" + u.profileImgPath
+                        : "http://localhost:3010/uploads/userDefault.png"
+                    }
+                  />
+                </ListItemAvatar>
+                <ListItemText
+                  primary={u.userName}
+                  secondary={"@" + u.userId}
+                />
+              </ListItem>
+            ))}
+          </List>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenFollowers(false)}>닫기</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* 팔로잉 리스트 모달 */}
+      <Dialog
+        open={openFollowing}
+        onClose={() => setOpenFollowing(false)}
+        fullWidth
+        maxWidth="xs"
+      >
+        <DialogTitle>팔로잉</DialogTitle>
+        <DialogContent dividers>
+          {following.length === 0 && (
+            <Typography variant="body2" color="text.secondary">
+              아직 팔로우하는 유저가 없습니다.
+            </Typography>
+          )}
+          <List>
+            {following.map((u) => (
+              <ListItem
+                button
+                key={u.userId}
+                onClick={() => {
+                  setOpenFollowing(false);
+                  navigate("/user/" + u.userId);
+                }}
+              >
+                <ListItemAvatar>
+                  <Avatar
+                    src={
+                      u.profileImgPath
+                        ? "http://localhost:3010" + u.profileImgPath
+                        : "http://localhost:3010/uploads/userDefault.png"
+                    }
+                  />
+                </ListItemAvatar>
+                <ListItemText
+                  primary={u.userName}
+                  secondary={"@" + u.userId}
+                />
+              </ListItem>
+            ))}
+          </List>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenFollowing(false)}>닫기</Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

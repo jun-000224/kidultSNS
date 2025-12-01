@@ -130,7 +130,7 @@ function Menu() {
         {/* 홈 */}
         <ListItemButton
           component={Link}
-          to="/feed"
+          to="/feedAll"
           sx={getItemSx('home')}
           onClick={() => setActiveMenu('home')}
         >

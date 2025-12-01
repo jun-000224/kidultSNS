@@ -26,11 +26,48 @@ import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import BookmarkBorderIcon from '@mui/icons-material/BookmarkBorder';
 import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
 import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
-import { jwtDecode } from 'jwt-decode';
-import { useNavigate } from 'react-router-dom';
 import FavoriteIcon from '@mui/icons-material/Favorite';
+import { jwtDecode } from 'jwt-decode';
+import { useNavigate, useLocation } from 'react-router-dom';
+
+// 활동 등급에 따른 프로필 테두리 색상
+function getGradeBorderColor(feedCnt) {
+  const count = feedCnt || 0;
+
+  if (count >= 40) {
+    // 다이아
+    return '#38bdf8';
+  } else if (count >= 30) {
+    // 금색
+    return '#facc15';
+  } else if (count >= 20) {
+    // 은색
+    return '#e5e7eb';
+  } else if (count >= 10) {
+    // 브론즈
+    return '#b45309';
+  }
+  // 기본 검정
+  return '#111827';
+}
+
+// 배열 섞기 (파도타기용 랜덤 정렬)
+function shuffleArray(arr) {
+  const copied = [...arr];
+  for (let i = copied.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copied[i], copied[j]] = [copied[j], copied[i]];
+  }
+  return copied;
+}
 
 function Feed() {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // 파도타기 모드 여부: /feed 경로일 때
+  const isSurfMode = location.pathname === '/feed';
+
   // 상세 모달 열림 여부
   const [open, setOpen] = useState(false);
   // 선택된 피드 정보
@@ -47,6 +84,9 @@ function Feed() {
   // 우측 상단 검색어
   const [search, setSearch] = useState('');
 
+  // 실제로 적용된 검색 키워드 (검색 결과 표시용)
+  const [searchKeyword, setSearchKeyword] = useState('');
+
   // 게시하기 모달용 상태
   const [writeOpen, setWriteOpen] = useState(false);
   const [writeTitle, setWriteTitle] = useState('');
@@ -54,7 +94,8 @@ function Feed() {
   const [writeHash, setWriteHash] = useState('');
   const [writeFiles, setWriteFiles] = useState([]);
 
-  const navigate = useNavigate();
+  // 파도 애니메이션 표시 여부
+  const [showWave, setShowWave] = useState(false);
 
   // 상단 핫한 피드 카드 목록 (하드코딩 5장)
   const hotFeedList = [
@@ -111,30 +152,41 @@ function Feed() {
     });
   };
 
-
   // 피드 목록 조회
   function fnFeeds() {
     const token = localStorage.getItem('token');
 
-    if (token) {
-      const decoded = jwtDecode(token);
-
-      fetch('http://localhost:3010/feed/' + decoded.userId)
-        .then((res) => res.json())
-        .then((data) => {
-          console.log('feed list ==> ', data);
-          const safeList = Array.isArray(data.list)
-            ? data.list.filter((item) => item != null)
-            : [];
-          setFeeds(safeList);
-        })
-        .catch((err) => {
-          console.log(err);
-        });
-    } else {
+    if (!token) {
       alert('로그인 후 이용해주세요.');
       navigate('/');
+      return;
     }
+
+    fetch('http://localhost:3010/feed/feedAll', {
+      headers: {
+        Authorization: 'Bearer ' + token
+      }
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        console.log('feed list ==> ', data);
+        const safeList = Array.isArray(data.list)
+          ? data.list.filter((item) => item != null)
+          : [];
+
+        // 파도타기 모드면 랜덤 정렬, 아니면 알고리즘 순서 그대로
+        if (isSurfMode) {
+          const shuffled = shuffleArray(safeList);
+          setFeeds(shuffled);
+        } else {
+          setFeeds(safeList);
+        }
+
+        setSearchKeyword('');
+      })
+      .catch((err) => {
+        console.log(err);
+      });
   }
 
   // 좋아요 토글
@@ -157,7 +209,6 @@ function Feed() {
       console.log('like toggle result ==> ', data);
 
       if (data.result === 'success') {
-        // 해당 피드의 likeCount, liked만 갱신
         setFeeds((prev) =>
           prev.map((f) =>
             f.feedId === feedId
@@ -180,7 +231,11 @@ function Feed() {
     if (token) {
       const decoded = jwtDecode(token);
 
-      fetch('http://localhost:3010/user/' + decoded.userId)
+      fetch('http://localhost:3010/user/' + decoded.userId, {
+        headers: {
+          Authorization: 'Bearer ' + token
+        }
+      })
         .then((res) => res.json())
         .then((data) => {
           console.log('user ==> ', data);
@@ -192,11 +247,66 @@ function Feed() {
     }
   }
 
-  // 사이트 처음 진입 시 피드 + 유저 정보 조회
+  // 피드 검색
+  function fnSearch() {
+    const token = localStorage.getItem('token');
+
+    if (!token) {
+      alert('로그인 후 이용해주세요.');
+      navigate('/');
+      return;
+    }
+
+    const keyword = search.trim();
+
+    // 검색어 없으면 전체 목록 다시 조회
+    if (!keyword) {
+      fnFeeds();
+      return;
+    }
+
+    fetch('http://localhost:3010/feed/search', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer ' + token
+      },
+      body: JSON.stringify({ search: keyword })
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        console.log('search result ==> ', data);
+        const safeList = Array.isArray(data.list)
+          ? data.list.filter((item) => item != null)
+          : [];
+        // 검색 결과는 그냥 검색 결과 순서대로 사용
+        setFeeds(safeList);
+
+        // 검색 성공 후, 어떤 키워드로 검색했는지 저장
+        setSearchKeyword(keyword);
+      })
+      .catch((err) => {
+        console.log(err);
+      });
+  }
+
+  // 사이트 처음 진입 & 모드 변경 시 피드 + 유저 정보 조회
   useEffect(() => {
     fnFeeds();
     fnGetUser();
-  }, []);
+
+    // 파도타기 모드일 때만 파도 애니메이션 실행
+    if (isSurfMode) {
+      setShowWave(true);
+      const timer = setTimeout(() => {
+        setShowWave(false);
+      }, 1800); // 1.8초 정도
+
+      return () => clearTimeout(timer);
+    } else {
+      setShowWave(false);
+    }
+  }, [isSurfMode]);
 
   // 피드 카드 클릭 시 상세 모달 열기
   const handleClickOpen = (feed) => {
@@ -268,7 +378,7 @@ function Feed() {
       formData.append('userId', decoded.userId);
       formData.append('title', writeTitle);
       formData.append('content', writeContent);
-      formData.append('hash', writeHash);   // 해시태그 추가
+      formData.append('hash', writeHash); // 해시태그 추가
 
       writeFiles.forEach((file) => {
         formData.append('file', file);
@@ -308,17 +418,69 @@ function Feed() {
     return selectedFeed.userName || '키덜트 유저';
   };
 
+  const userBorderColor = getGradeBorderColor(user?.feedCnt);
+
   return (
     <>
+      {/* 파도 애니메이션 오버레이 (파도타기 모드일 때만) */}
+      {isSurfMode && showWave && (
+        <Box
+          sx={{
+            position: 'fixed',
+            left: 0,
+            bottom: 0,
+            width: '100%',
+            height: '100vh',
+            pointerEvents: 'none',
+            zIndex: 1300,
+            overflow: 'hidden'
+          }}
+        >
+          <Box
+            sx={{
+              position: 'absolute',
+              bottom: '-10%',
+              left: 0,
+              width: '100%',
+              height: '120%',
+              background: 'linear-gradient(180deg, #38bdf8, #0ea5e9, #1d4ed8)',
+              boxShadow: '0 -10px 40px rgba(15,23,42,0.45)',
+              animation: 'waveUpDown 1.8s ease-out forwards',
+              '@keyframes waveUpDown': {
+                '0%': { transform: 'translateY(100%)' },
+                '40%': { transform: 'translateY(-10%)' },
+                '100%': { transform: 'translateY(120%)' }
+              }
+            }}
+          >
+            <Box
+              sx={{
+                position: 'absolute',
+                top: '18%',
+                width: '100%',
+                textAlign: 'center',
+                color: '#e0f2fe',
+                fontWeight: 700,
+                fontSize: '1.1rem',
+                letterSpacing: 1
+              }}
+            >
+              🌊 파도타기 모드로 랜덤 피드를 탐색 중...
+            </Box>
+          </Box>
+        </Box>
+      )}
+
       {/* 메인 레이아웃 영역 */}
       <Box
         sx={{
           minHeight: '100vh',
-          backgroundColor: '#ffffffff',
+          background: '#ffffffff', // 항상 흰색 배경
           paddingY: 4,
           paddingX: 3,
           display: 'flex',
-          justifyContent: 'center'
+          justifyContent: 'center',
+          transition: 'background 0.6s ease'
         }}
       >
         {/* 가운데 피드 + 오른쪽 프로필을 감싸는 영역 */}
@@ -350,7 +512,10 @@ function Feed() {
                   <Box sx={{ mb: 1 }}>
                     <Typography
                       variant="subtitle2"
-                      sx={{ fontWeight: 700, color: '#111827' }}
+                      sx={{
+                        fontWeight: 700,
+                        color: '#111827'
+                      }}
                     >
                       오늘의 핫한 카드🔥
                     </Typography>
@@ -527,17 +692,41 @@ function Feed() {
                 </Box>
               )}
 
-              {/* 타임라인 타이틀 영역 */}
+              {/* 타임라인 / 파도타기 타이틀 영역 */}
               <Box sx={{ mb: 3 }}>
                 <Typography
                   variant="h6"
-                  sx={{ color: '#111827', fontWeight: 700 }}
+                  sx={{
+                    color: '#111827',
+                    fontWeight: 700
+                  }}
                 >
-                  타임라인
+                  {isSurfMode ? '파도타기 🌊' : '타임라인'}
                 </Typography>
-                <Typography variant="body2" sx={{ color: '#6b7280' }}>
-                  오늘의 새로운 소식들을 확인해보세요
-                </Typography>
+
+                {/* 기본 안내 문구 */}
+                {!searchKeyword && !isSurfMode && (
+                  <Typography variant="body2" sx={{ color: '#6b7280' }}>
+                    오늘의 새로운 소식들을 확인해보세요
+                  </Typography>
+                )}
+
+                {/* 파도타기 모드 안내 문구 */}
+                {!searchKeyword && isSurfMode && (
+                  <Typography variant="body2" sx={{ color: '#2563eb', mt: 0.5 }}>
+                    알고리즘을 끄고, 무작위로 떠다니는 피드를 보여주는 중입니다.
+                  </Typography>
+                )}
+
+                {/* 검색 중일 때 안내 문구 */}
+                {searchKeyword && (
+                  <Typography
+                    variant="body2"
+                    sx={{ color: '#2563eb', mt: 0.5 }}
+                  >
+                    "{searchKeyword}" 검색 결과 피드입니다.
+                  </Typography>
+                )}
               </Box>
 
               {/* 피드 카드 리스트 (중앙 영역) */}
@@ -590,15 +779,21 @@ function Feed() {
                           {/* 카드 내용 영역 */}
                           <Card
                             sx={{
-                              backgroundColor: '#ffffff',
+                              backgroundColor: isSurfMode
+                                ? '#eff6ff'
+                                : '#ffffff',
                               borderRadius: '16px',
                               overflow: 'hidden',
                               boxShadow: '0 4px 16px rgba(15,23,42,0.08)',
-                              border: '1px solid #e5e7eb',
+                              border: isSurfMode
+                                ? '1px solid #bfdbfe'
+                                : '1px solid #e5e7eb',
                               display: 'flex',
                               flexDirection: 'column',
                               '&:hover': {
-                                backgroundColor: '#f9fafb'
+                                backgroundColor: isSurfMode
+                                  ? '#dbeafe'
+                                  : '#f9fafb'
                               }
                             }}
                           >
@@ -620,7 +815,10 @@ function Feed() {
 
                             {/* 텍스트 + 해시태그 영역 */}
                             <CardContent
-                              sx={{ backgroundColor: '#ffffff', pb: 1 }}
+                              sx={{
+                                backgroundColor: 'transparent',
+                                pb: 1
+                              }}
                             >
                               <Typography
                                 variant="body2"
@@ -673,17 +871,18 @@ function Feed() {
                               <IconButton
                                 size="small"
                                 onClick={(e) => {
-                                  e.stopPropagation();          // 카드 클릭 이벤트 막기
+                                  e.stopPropagation();
                                   handleToggleLike(feed.feedId);
                                 }}
                               >
                                 {feed.liked ? (
-                                  <FavoriteIcon sx={{ fontSize: 20, color: '#e11d48' }} />
+                                  <FavoriteIcon
+                                    sx={{ fontSize: 20, color: '#e11d48' }}
+                                  />
                                 ) : (
                                   <FavoriteBorderIcon sx={{ fontSize: 20 }} />
                                 )}
                               </IconButton>
-
 
                               {/* 보관하기 아이콘 */}
                               <IconButton
@@ -737,11 +936,19 @@ function Feed() {
               fullWidth
               value={search}
               onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  fnSearch();
+                }
+              }}
               sx={{
                 mb: 2,
                 backgroundColor: '#ffffff',
                 '& .MuiOutlinedInput-root': {
-                  borderRadius: '999px'
+                  borderRadius: '999px',
+                  '& fieldset': {
+                    borderRadius: '999px'
+                  }
                 }
               }}
             />
@@ -768,7 +975,7 @@ function Feed() {
                   height: 70,
                   margin: '0 auto',
                   mb: 2,
-                  border: '2px solid #000000ff',
+                  border: `2px solid ${userBorderColor}`,
                   boxSizing: 'border-box'
                 }}
               />
@@ -881,10 +1088,11 @@ function Feed() {
                   ? 'http://localhost:3010' + user.profileImgPath
                   : 'http://localhost:3010/uploads/userDefault.png'
               }
+              sx={{
+                border: `2px solid ${userBorderColor}`
+              }}
             >
-              {user?.userName
-                ? user.userName.charAt(0).toUpperCase()
-                : 'U'}
+              {user?.userName ? user.userName.charAt(0).toUpperCase() : 'U'}
             </Avatar>
 
             <Box sx={{ flex: 1 }}>
@@ -1171,7 +1379,7 @@ function Feed() {
                 }
               })
                 .then((res) => res.json())
-                .then((data) => {
+                .then(() => {
                   alert('삭제되었습니다.');
                   setOpen(false);
                   fnFeeds();
