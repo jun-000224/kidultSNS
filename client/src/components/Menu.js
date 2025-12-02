@@ -294,8 +294,6 @@ function Menu() {
           sx={getItemSx('alarm')}
           onClick={async () => {
             setActiveMenu('alarm');
-            // 리스트는 이미 주기적으로 가져오고 있으니,
-            // 모달 열고 전체 읽음 처리만 수행
             setOpenAlarm(true);
             await readAllNotifications();
           }}
@@ -404,25 +402,51 @@ function Menu() {
                 </ListItemAvatar>
                 <ListItemText
                   primary={
-                    n.type === 'LIKE'
-                      ? `${n.senderName || n.senderId} 님이 회원님의 게시글을 좋아합니다.`
-                      : n.type === 'FOLLOW'
-                      ? `${n.senderName || n.senderId} 님이 회원님을 팔로우하기 시작했습니다.`
-                      : `${n.senderName || n.senderId} 님의 알림`
-                  }
-                  secondary={
-                    <>
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 0.3
+                      }}
+                    >
+                      {/* 1. 메인 알람 문구 영역 */}
+                      <Typography
+                        variant="body2"
+                        sx={{
+                          fontWeight:
+                            n.isRead === 0 || n.isRead === '0' ? 600 : 400,
+                          color: '#111827',
+                          whiteSpace: 'pre-wrap'
+                        }}
+                      >
+                        {n.type === 'LIKE'
+                          ? `${n.senderName || n.senderId} 님이 회원님의 게시글을 좋아합니다.`
+                          : n.type === 'FOLLOW'
+                          ? `${n.senderName || n.senderId} 님이 회원님을 팔로우하기 시작했습니다.`
+                          : `${n.senderName || n.senderId} 님의 알림`}
+                      </Typography>
+
+                      {/* 2. 제목 영역 */}
                       {n.feedTitle && (
                         <Typography
-                          component="span"
                           variant="body2"
-                          color="text.primary"
+                          sx={{ color: '#4b5563' }}
+                          noWrap
                         >
                           {n.feedTitle}
                         </Typography>
                       )}
-                      {n.cdatetime ? ` · ${n.cdatetime}` : ''}
-                    </>
+
+                      {/* 3. 날짜 영역 */}
+                      {n.cdatetime && (
+                        <Typography
+                          variant="caption"
+                          sx={{ color: '#9ca3af' }}
+                        >
+                          {n.cdatetime}
+                        </Typography>
+                      )}
+                    </Box>
                   }
                 />
               </ListItem>
