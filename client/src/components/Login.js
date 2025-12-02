@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { TextField, Button, Container, Typography, Box, Paper } from '@mui/material';
+import { TextField, Button, Box, Paper } from '@mui/material';
 import { Link, useNavigate } from 'react-router-dom';
 
 function Login() {
@@ -17,6 +17,7 @@ function Login() {
         background: '#fafafa'
       }}
     >
+      {/* 왼쪽 이미지 박스 */}
       <Box
         sx={{
           display: { xs: 'none', md: 'block' },
@@ -29,9 +30,11 @@ function Login() {
             width: '380px',
             height: '600px',
             borderRadius: '20px',
-            backgroundImage: `url('/kidult_login_mock1.png')`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center'
+            backgroundImage: `url('http://localhost:3010/uploads/HWIMG.png')`,
+            backgroundSize: 'contain',       // 이미지 전체 보이도록
+            backgroundPosition: 'center',    // 가운데 정렬
+            backgroundRepeat: 'no-repeat',   // 반복 없음
+            backgroundColor: '#fafafa'       // 여백 배경색
           }}
         />
       </Box>
@@ -47,24 +50,13 @@ function Login() {
           border: '1px solid #dbdbdb'
         }}
       >
-        {/* 로고 이미지 삽입 */}
+        {/* 로고 이미지 */}
         <Box sx={{ textAlign: 'center', marginBottom: '20px' }}>
           <img
             src="http://localhost:3010/uploads/HW_LOGO.png"
             alt="Hobby Wave Logo"
             style={{ width: '70px', height: '70px' }}
           />
-
-          {/* <Typography
-            variant="h5"
-            sx={{
-              marginTop: '12px',
-              fontFamily: 'Instagram Sans, sans-serif',
-              fontWeight: 700
-            }}
-          >
-            Hobby Wave
-          </Typography> */}
         </Box>
 
         {/* 로그인 입력 */}
@@ -107,7 +99,7 @@ function Login() {
                   localStorage.setItem("token", data.token);
                   navigate("/feedAll");
                 }
-              })
+              });
           }}
           variant="contained"
           fullWidth
@@ -124,7 +116,7 @@ function Login() {
           로그인
         </Button>
 
-        {/* 구분선 */}
+        {/* 안내 문구 */}
         <Box
           sx={{
             textAlign: 'center',
@@ -136,8 +128,14 @@ function Login() {
           처음이신가요?
         </Box>
 
-        {/* 하단 회원가입 링크 */}
-        <Box sx={{ textAlign: 'center', marginTop: '20px', fontSize: '0.9rem' }}>
+        {/* 회원가입 링크 */}
+        <Box
+          sx={{
+            textAlign: 'center',
+            marginTop: '20px',
+            fontSize: '0.9rem'
+          }}
+        >
           그렇다면,{" "}
           <Link to="/join" style={{ color: '#0095f6', textDecoration: 'none' }}>
             가입하기!
