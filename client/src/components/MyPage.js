@@ -47,7 +47,7 @@ function ColorByStatus(status) {
     boxShadow =
       '0 0 0 2px rgba(209,213,219,0.6), 0 0 18px rgba(156,163,175,0.9)';
   } else if (s === 'g') {
-    // 골드 (좀 더 노란 느낌 + 반짝)
+    // 골드
     border = '2px solid #facc15';
     boxShadow =
       '0 0 0 2px rgba(250,204,21,0.8), 0 0 22px rgba(245,158,11,0.95)';
@@ -57,13 +57,47 @@ function ColorByStatus(status) {
     boxShadow =
       '0 0 0 2px rgba(34,197,94,0.7), 0 0 20px rgba(16,185,129,0.9)';
   } else if (s === 'a') {
-    // 관리자 (보라 계열)
+    // 관리자
     border = '2px solid #a855f7';
     boxShadow =
       '0 0 0 2px rgba(168,85,247,0.8), 0 0 24px rgba(129,140,248,0.95)';
   }
 
   return { border, boxShadow };
+}
+
+/**
+ * 날짜 표시 함수
+ * - 오늘 작성된 글: "YYYY-MM-DD HH:mm"
+ * - 어제 이전 글  : "YYYY-MM-DD"
+ */
+function formatDateTime(value) {
+  if (!value) return '';
+
+  const date = new Date(value);
+  if (isNaN(date.getTime())) {
+    return value;
+  }
+
+  const pad = (n) => String(n).padStart(2, '0');
+
+  const year = date.getFullYear();
+  const month = pad(date.getMonth() + 1);
+  const day = pad(date.getDate());
+  const hour = pad(date.getHours());
+  const minute = pad(date.getMinutes());
+
+  const today = new Date();
+  const isSameDay =
+    date.getFullYear() === today.getFullYear() &&
+    date.getMonth() === today.getMonth() &&
+    date.getDate() === today.getDate();
+
+  if (isSameDay) {
+    return `${year}-${month}-${day} ${hour}:${minute}`;
+  } else {
+    return `${year}-${month}-${day}`;
+  }
 }
 
 function MyPage() {
@@ -97,6 +131,10 @@ function MyPage() {
   const [editUserName, setEditUserName] = useState('');
   const [profileFile, setProfileFile] = useState(null);
   const [profilePreview, setProfilePreview] = useState(null);
+
+  // 게시글 상세보기 모달 상태
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [selectedFeed, setSelectedFeed] = useState(null);
 
   const navigate = useNavigate();
 
@@ -151,11 +189,9 @@ function MyPage() {
   // 보기 타입에 따라 피드 필터링
   const filteredFeeds = feeds.filter((feed) => {
     if (viewType === 'image') {
-      // 이미지가 있는 게시글만
-      return !!feed.imgPath;
+      return !!feed.imgPath;   // 이미지 있는 글
     } else {
-      // 이미지가 없는 텍스트 게시글만
-      return !feed.imgPath;
+      return !feed.imgPath;    // 텍스트만 있는 글
     }
   });
 
@@ -302,6 +338,18 @@ function MyPage() {
     }
   };
 
+  // 게시글 카드 클릭 시 상세보기 열기
+  const handleOpenDetail = (feed) => {
+    setSelectedFeed(feed);
+    setDetailOpen(true);
+  };
+
+  // 상세보기 닫기
+  const handleCloseDetail = () => {
+    setDetailOpen(false);
+    setSelectedFeed(null);
+  };
+
   return (
     <Box
       sx={{
@@ -350,7 +398,7 @@ function MyPage() {
                 }}
               />
 
-              {/* 이름, 아이디, 소개 + (남의 페이지일 때) 팔로우 버튼 / (내 페이지일 때) 프로필 수정 버튼 */}
+              {/* 이름, 아이디, 소개 + 버튼들 */}
               <Box sx={{ flex: 1 }}>
                 <Box
                   sx={{
@@ -367,7 +415,7 @@ function MyPage() {
                     @{user?.userId}
                   </Typography>
 
-                  {/* 남의 마이페이지일 때만 팔로우 버튼 노출 */}
+                  {/* 남의 마이페이지일 때 팔로우 버튼 */}
                   {!isMyPage && user && (
                     <Button
                       variant={isFollowing ? "outlined" : "contained"}
@@ -383,7 +431,7 @@ function MyPage() {
                     </Button>
                   )}
 
-                  {/* 내 마이페이지일 때만 프로필 수정 버튼 노출 */}
+                  {/* 내 마이페이지일 때 프로필 수정 버튼 */}
                   {isMyPage && (
                     <Button
                       variant="outlined"
@@ -522,7 +570,13 @@ function MyPage() {
             <Grid container spacing={2}>
               {filteredFeeds.map((feed) => (
                 <Grid item xs={12} sm={6} md={4} key={feed.feedId}>
-                  <Card sx={{ borderRadius: "18px" }}>
+                  <Card
+                    sx={{
+                      borderRadius: "18px",
+                      cursor: "pointer"
+                    }}
+                    onClick={() => handleOpenDetail(feed)}
+                  >
                     {/* 이미지가 있는 경우에만 출력 */}
                     {feed.imgPath && (
                       <CardMedia
@@ -553,7 +607,7 @@ function MyPage() {
                         color="text.secondary"
                         sx={{ display: "block", mt: 1 }}
                       >
-                        {feed.cdatetime}
+                        {formatDateTime(feed.cdatetime)}
                       </Typography>
                     </CardContent>
                   </Card>
@@ -571,6 +625,67 @@ function MyPage() {
           </Box>
         </Box>
       </Container>
+
+      {/* 게시글 상세보기 모달 */}
+      <Dialog
+        open={detailOpen}
+        onClose={handleCloseDetail}
+        fullWidth
+        maxWidth="md"
+      >
+        <DialogTitle>
+          {selectedFeed?.title || "게시글 상세보기"}
+        </DialogTitle>
+        <DialogContent dividers>
+          {selectedFeed && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {/* 이미지 */}
+              {selectedFeed.imgPath && (
+                <Box
+                  sx={{
+                    borderRadius: 2,
+                    overflow: 'hidden',
+                    border: "1px solid #e5e7eb"
+                  }}
+                >
+                  <img
+                    src={"http://localhost:3010" + selectedFeed.imgPath}
+                    alt={selectedFeed.title}
+                    style={{ width: "100%", display: "block" }}
+                  />
+                </Box>
+              )}
+
+              {/* 내용 */}
+              <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap' }}>
+                {selectedFeed.content}
+              </Typography>
+
+              {/* 해시태그 */}
+              {selectedFeed.hash && (
+                <Typography
+                  variant="body2"
+                  sx={{ color: "#2563eb", whiteSpace: 'pre-wrap' }}
+                >
+                  {selectedFeed.hash}
+                </Typography>
+              )}
+
+              {/* 작성일 */}
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{ mt: 1 }}
+              >
+                작성일 {formatDateTime(selectedFeed.cdatetime)}
+              </Typography>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseDetail}>닫기</Button>
+        </DialogActions>
+      </Dialog>
 
       {/* 팔로워 리스트 모달 */}
       <Dialog

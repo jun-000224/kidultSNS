@@ -400,6 +400,12 @@ function Feed() {
   const handleClickOpen = (feed) => {
     setSelectedFeed(feed);
     setOpen(true);
+
+    setComments([
+      { id: 'user1', text: '멋진 피규어네요.' },
+      { id: 'user2', text: '컬러감이 너무 예뻐요.' },
+      { id: 'user3', text: '소장욕구 자극됩니다.' }
+    ]);
     setNewComment('');
   };
 
@@ -499,7 +505,7 @@ function Feed() {
     return selectedFeed.userName || '키덜트 유저';
   };
 
-  // 로그인 유저 등급 스타일
+  // 로그인 유저 등급 스타일 (우측 프로필 / 작성 모달용)
   const userStatus = (user?.status || 'c').toLowerCase();
   const avatarStyle = ColorByStatus(userStatus);
 
@@ -558,7 +564,7 @@ function Feed() {
       <Box
         sx={{
           minHeight: '100vh',
-          background: '#ffffffff', // 항상 흰색 배경
+          background: '#ffffffff',
           paddingY: 4,
           paddingX: 3,
           display: 'flex',
@@ -823,6 +829,9 @@ function Feed() {
                         ? displayName.charAt(0).toUpperCase()
                         : 'U';
 
+                      const feedStatus = (feed.status || 'c').toLowerCase();
+                      const feedAvatarStyle = ColorByStatus(feedStatus);
+
                       return (
                         <Box
                           key={feed.feedId}
@@ -843,8 +852,21 @@ function Feed() {
                               handleClickUserArea(e, feed.userId)
                             }
                           >
-                            <Avatar sx={{ bgcolor: '#2563eb' }}>
-                              {displayInitial}
+                            <Avatar
+                              alt="프로필 이미지"
+                              src={
+                                feed.profileImgPath
+                                  ? 'http://localhost:3010' + feed.profileImgPath
+                                  : 'http://localhost:3010/uploads/userDefault.png'
+                              }
+                              sx={{
+                                width: 40,
+                                height: 40,
+                                boxSizing: 'border-box',
+                                ...feedAvatarStyle
+                              }}
+                            >
+                              {!feed.profileImgPath && displayInitial}
                             </Avatar>
                             <Box sx={{ ml: 1.5 }}>
                               <Typography

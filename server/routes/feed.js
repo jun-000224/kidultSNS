@@ -36,6 +36,9 @@ function buildFeedList(rows) {
                 feedId: row.feedId,
                 userId: row.userId,
                 userName: row.userName,
+                // 유저 등급 / 프로필 이미지 추가
+                status: row.status,
+                profileImgPath: row.profileImgPath,
                 title: row.title,
                 content: row.content,
                 feedType: row.feedType,
@@ -127,6 +130,9 @@ async function updateUserTagScoreByFeed(userId, feedId, delta) {
 /**
  * 1) 전체 피드 목록 (알고리즘 정렬된 타임라인)
  *  - URL: GET /feed/feedAll
+ *  - 헤더에 토큰 필수: Authorization: Bearer xxx
+ *  - 좋아요 수 / 내 좋아요 여부 / 북마크 수 / 내 북마크 여부 포함
+ *  - 로그인 유저의 tbl_user_tag_score 를 반영해서 정렬
  */
 router.get("/feedAll", authMiddleware, async (req, res) => {
     const loginUserId = req.user.userId;
@@ -135,7 +141,7 @@ router.get("/feedAll", authMiddleware, async (req, res) => {
         const sql =
             "SELECT F.*, " +
             "       I.imgId, I.imgName, I.imgPath, " +
-            "       U.userName, " +
+            "       U.userName, U.status, U.profileImgPath, " +
             "       IFNULL(L.cntLike, 0) AS likeCount, " +
             "       IFNULL(UL.liked, 0) AS liked, " +
             "       IFNULL(B.cntBookmark, 0) AS bookmarkCount, " +
@@ -143,21 +149,25 @@ router.get("/feedAll", authMiddleware, async (req, res) => {
             "FROM tbl_feed F " +
             "LEFT JOIN tbl_feed_img I ON F.feedId = I.feedId " +
             "JOIN tbl_user U ON F.userId = U.userId " +
+            // 전체 좋아요 수
             "LEFT JOIN ( " +
             "   SELECT feedId, COUNT(*) AS cntLike " +
             "   FROM tbl_feed_like " +
             "   GROUP BY feedId " +
             ") L ON F.feedId = L.feedId " +
+            // 내가 좋아요 눌렀는지
             "LEFT JOIN ( " +
             "   SELECT feedId, 1 AS liked " +
             "   FROM tbl_feed_like " +
             "   WHERE userId = ? " +
             ") UL ON F.feedId = UL.feedId " +
+            // 전체 북마크 수
             "LEFT JOIN ( " +
             "   SELECT feedId, COUNT(*) AS cntBookmark " +
             "   FROM tbl_feed_bookmark " +
             "   GROUP BY feedId " +
             ") B ON F.feedId = B.feedId " +
+            // 내가 북마크 했는지
             "LEFT JOIN ( " +
             "   SELECT feedId, 1 AS bookmarked " +
             "   FROM tbl_feed_bookmark " +
@@ -168,7 +178,7 @@ router.get("/feedAll", authMiddleware, async (req, res) => {
         const [rows] = await db.query(sql, [loginUserId, loginUserId]);
         const list = buildFeedList(rows);
 
-        // 로그인 유저의 태그 점수 조회
+        // 로그인 유저의 태그 점수 한번에 조회
         let tagScoreMap = new Map();
         try {
             const [tagRows] = await db.query(
@@ -217,6 +227,8 @@ router.get("/feedAll", authMiddleware, async (req, res) => {
 /**
  * 2) 피드 검색
  *  - URL: POST /feed/search
+ *  - body: { search: "키워드" }
+ *  - 검색 결과는 기존대로 최신순 정렬
  */
 router.post("/search", authMiddleware, async (req, res) => {
     const loginUserId = req.user.userId;
@@ -226,7 +238,7 @@ router.post("/search", authMiddleware, async (req, res) => {
         const sql =
             "SELECT F.*, " +
             "       I.imgId, I.imgName, I.imgPath, " +
-            "       U.userName, " +
+            "       U.userName, U.status, U.profileImgPath, " +
             "       IFNULL(L.cntLike, 0) AS likeCount, " +
             "       IFNULL(UL.liked, 0) AS liked, " +
             "       IFNULL(B.cntBookmark, 0) AS bookmarkCount, " +
@@ -286,11 +298,11 @@ router.get("/bookmarks", authMiddleware, async (req, res) => {
         const sql =
             "SELECT F.*, " +
             "       I.imgId, I.imgName, I.imgPath, " +
-            "       U.userName, " +
+            "       U.userName, U.status, U.profileImgPath, " +
             "       IFNULL(L.cntLike, 0) AS likeCount, " +
             "       IFNULL(UL.liked, 0) AS liked, " +
             "       IFNULL(B.cntBookmark, 0) AS bookmarkCount, " +
-            "       1 AS bookmarked " +
+            "       1 AS bookmarked " + // 내 북마크 목록이니까 항상 1
             "FROM tbl_feed_bookmark BK " +
             "JOIN tbl_feed F ON BK.feedId = F.feedId " +
             "LEFT JOIN tbl_feed_img I ON F.feedId = I.feedId " +
@@ -338,7 +350,7 @@ router.post("/", async (req, res) => {
         const [result] = await db.query(sql, [userId, title, content, hash]);
         const feedId = result.insertId;
 
-        // 작성자의 태그 점수도 약하게 반영
+        // 작성자의 태그 점수도 약하게 반영 (본인 관심 태그라고 가정)
         try {
             await updateUserTagScoreByFeed(userId, feedId, 1);
         } catch (innerErr) {
@@ -475,7 +487,6 @@ router.delete("/:feedId", authMiddleware, async (req, res) => {
  * 9) 좋아요 토글
  *  - URL: POST /feed/:feedId/like
  *  - 좋아요 ON 시 태그 점수 +3, OFF 시 -3
- *  - 좋아요 ON 시 알림 생성
  */
 router.post("/:feedId/like", authMiddleware, async (req, res) => {
     const { feedId } = req.params;
@@ -504,29 +515,6 @@ router.post("/:feedId/like", authMiddleware, async (req, res) => {
                 [feedId, userId]
             );
             liked = true;
-
-            // 좋아요 알림 생성 (본인 글이 아닐 때만)
-            try {
-                const [feedRows] = await db.query(
-                    "SELECT userId FROM tbl_feed WHERE feedId = ?",
-                    [feedId]
-                );
-
-                if (feedRows.length > 0) {
-                    const ownerId = feedRows[0].userId;
-
-                    if (ownerId !== userId) {
-                        await db.query(
-                            "INSERT INTO tbl_notification " +
-                            "  (receiverId, senderId, type, feedId, isRead) " +
-                            "VALUES (?, ?, 'LIKE', ?, 0)",
-                            [ownerId, userId, feedId]
-                        );
-                    }
-                }
-            } catch (notiErr) {
-                console.log("like notification insert error:", notiErr);
-            }
         }
 
         // 태그 점수 반영
@@ -554,6 +542,7 @@ router.post("/:feedId/like", authMiddleware, async (req, res) => {
 /**
  * 10) 북마크 토글
  *  - URL: POST /feed/:feedId/bookmark
+ *  - 북마크 ON 시 태그 점수 +5, OFF 시 -5
  */
 router.post("/:feedId/bookmark", authMiddleware, async (req, res) => {
     const { feedId } = req.params;
@@ -615,6 +604,7 @@ router.get("/bookmark/list", authMiddleware, async (req, res) => {
 
         const [rows] = await db.query(sql, [userId]);
 
+        // feedId 중복 제거나 이미지 합치기
         let feedMap = new Map();
 
         rows.forEach(row => {
