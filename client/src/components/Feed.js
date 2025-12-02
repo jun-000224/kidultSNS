@@ -89,12 +89,16 @@ function Feed() {
   const [open, setOpen] = useState(false);
   // 선택된 피드 정보
   const [selectedFeed, setSelectedFeed] = useState(null);
+  // 상세 모달에서 현재 보여주는 이미지 인덱스
+  const [selectedImgIndex, setSelectedImgIndex] = useState(0);
   // 댓글 목록
   const [comments, setComments] = useState([]);
   // 새 댓글 입력값
   const [newComment, setNewComment] = useState('');
   // 피드 목록
   const [feeds, setFeeds] = useState([]);
+  // 피드별 현재 이미지 인덱스
+  const [feedImageIndex, setFeedImageIndex] = useState({});
   // 우측 프로필 카드용 유저 정보
   const [user, setUser] = useState(null);
 
@@ -199,6 +203,8 @@ function Feed() {
           setFeeds(safeList);
         }
 
+        // 이미지 인덱스 초기화
+        setFeedImageIndex({});
         setSearchKeyword('');
       })
       .catch((err) => {
@@ -208,7 +214,6 @@ function Feed() {
 
   // 유저 정보 영역 클릭 시 마이페이지 / 상대 마이페이지 이동
   const handleClickUserArea = (e, feedUserId) => {
-    // 카드 클릭으로 상세 모달 열리는 것 막기
     e.stopPropagation();
 
     const token = localStorage.getItem('token');
@@ -340,7 +345,6 @@ function Feed() {
 
     const keyword = search.trim();
 
-    // 검색어 없으면 전체 목록 다시 조회
     if (!keyword) {
       fnFeeds();
       return;
@@ -361,6 +365,7 @@ function Feed() {
           ? data.list.filter((item) => item != null)
           : [];
         setFeeds(safeList);
+        setFeedImageIndex({});
         setSearchKeyword(keyword);
       })
       .catch((err) => {
@@ -373,14 +378,13 @@ function Feed() {
     fnGetUser();
 
     if (isSurfMode) {
-      // 파도타기 모드 진입: 파도 올리고, 라벨은 잠깐 숨김
       setShowWave(true);
       setShowSurfLabel(false);
 
       const timer = setTimeout(() => {
-        fnFeeds();          // 이 시점에서 피드 로딩 + 셔플
+        fnFeeds();
         setShowWave(false);
-        setShowSurfLabel(true);   // 이때부터 "파도타기" 텍스트 노출
+        setShowSurfLabel(true);
       }, 1800);
 
       return () => {
@@ -389,23 +393,53 @@ function Feed() {
         setShowSurfLabel(false);
       };
     } else {
-      // 타임라인 모드
       fnFeeds();
       setShowWave(false);
       setShowSurfLabel(false);
     }
   }, [isSurfMode]);
 
+  // 카드 이미지용 현재 인덱스 가져오기
+  const getFeedCurrentIndex = (feedId, length) => {
+    if (!length || length <= 0) return 0;
+    const idx = feedImageIndex[feedId];
+    if (idx == null || idx < 0 || idx >= length) return 0;
+    return idx;
+  };
+
+  // 피드 카드 이미지 이전
+  const handlePrevFeedImage = (e, feed) => {
+    e.stopPropagation();
+    if (!feed || !Array.isArray(feed.images) || feed.images.length <= 1) {
+      return;
+    }
+    const len = feed.images.length;
+    setFeedImageIndex((prev) => {
+      const current = prev[feed.feedId] ?? 0;
+      const next = (current - 1 + len) % len;
+      return { ...prev, [feed.feedId]: next };
+    });
+  };
+
+  // 피드 카드 이미지 다음
+  const handleNextFeedImage = (e, feed) => {
+    e.stopPropagation();
+    if (!feed || !Array.isArray(feed.images) || feed.images.length <= 1) {
+      return;
+    }
+    const len = feed.images.length;
+    setFeedImageIndex((prev) => {
+      const current = prev[feed.feedId] ?? 0;
+      const next = (current + 1) % len;
+      return { ...prev, [feed.feedId]: next };
+    });
+  };
+
   // 피드 카드 클릭 시 상세 모달 열기
   const handleClickOpen = (feed) => {
     setSelectedFeed(feed);
+    setSelectedImgIndex(0);
     setOpen(true);
-
-    setComments([
-      { id: 'user1', text: '멋진 피규어네요.' },
-      { id: 'user2', text: '컬러감이 너무 예뻐요.' },
-      { id: 'user3', text: '소장욕구 자극됩니다.' }
-    ]);
     setNewComment('');
   };
 
@@ -413,7 +447,34 @@ function Feed() {
   const handleClose = () => {
     setOpen(false);
     setSelectedFeed(null);
+    setSelectedImgIndex(0);
     setComments([]);
+  };
+
+  // 상세 모달 이미지 이전
+  const handlePrevSelectedImage = () => {
+    if (
+      !selectedFeed ||
+      !Array.isArray(selectedFeed.images) ||
+      selectedFeed.images.length <= 1
+    ) {
+      return;
+    }
+    const len = selectedFeed.images.length;
+    setSelectedImgIndex((prev) => (prev - 1 + len) % len);
+  };
+
+  // 상세 모달 이미지 다음
+  const handleNextSelectedImage = () => {
+    if (
+      !selectedFeed ||
+      !Array.isArray(selectedFeed.images) ||
+      selectedFeed.images.length <= 1
+    ) {
+      return;
+    }
+    const len = selectedFeed.images.length;
+    setSelectedImgIndex((prev) => (prev + 1) % len);
   };
 
   // 댓글 추가
@@ -832,6 +893,25 @@ function Feed() {
                       const feedStatus = (feed.status || 'c').toLowerCase();
                       const feedAvatarStyle = ColorByStatus(feedStatus);
 
+                      const hasImages =
+                        Array.isArray(feed.images) && feed.images.length > 0;
+
+                      let cardImgSrc = '';
+                      let cardImgAlt = '';
+
+                      if (hasImages) {
+                        const idx = getFeedCurrentIndex(
+                          feed.feedId,
+                          feed.images.length
+                        );
+                        const imgObj = feed.images[idx];
+                        cardImgSrc = getImgUrl(imgObj.imgPath);
+                        cardImgAlt = imgObj.imgName;
+                      } else if (feed.imgPath) {
+                        cardImgSrc = getImgUrl(feed.imgPath);
+                        cardImgAlt = feed.imgName;
+                      }
+
                       return (
                         <Box
                           key={feed.feedId}
@@ -856,7 +936,8 @@ function Feed() {
                               alt="프로필 이미지"
                               src={
                                 feed.profileImgPath
-                                  ? 'http://localhost:3010' + feed.profileImgPath
+                                  ? 'http://localhost:3010' +
+                                    feed.profileImgPath
                                   : 'http://localhost:3010/uploads/userDefault.png'
                               }
                               sx={{
@@ -905,20 +986,111 @@ function Feed() {
                               }
                             }}
                           >
-                            {/* 이미지 영역 */}
-                            {feed.imgPath && (
-                              <CardMedia
-                                component="img"
-                                image={getImgUrl(feed.imgPath)}
-                                alt={feed.imgName}
+                            {/* 이미지 영역 (여러 장일 경우 슬라이드) */}
+                            {cardImgSrc && (
+                              <Box
                                 sx={{
-                                  width: '100%',
-                                  height: 400,
-                                  objectFit: 'cover',
-                                  borderBottom: '1px solid #e5e7eb',
-                                  backgroundColor: '#000000'
+                                  position: 'relative'
                                 }}
-                              />
+                              >
+                                <CardMedia
+                                  component="img"
+                                  image={cardImgSrc}
+                                  alt={cardImgAlt}
+                                  sx={{
+                                    width: '100%',
+                                    height: 400,
+                                    objectFit: 'cover',
+                                    borderBottom: '1px solid #e5e7eb',
+                                    backgroundColor: '#000000'
+                                  }}
+                                />
+
+                                {hasImages && feed.images.length > 1 && (
+                                  <>
+                                    <IconButton
+                                      size="small"
+                                      onClick={(e) =>
+                                        handlePrevFeedImage(e, feed)
+                                      }
+                                      sx={{
+                                        position: 'absolute',
+                                        top: '50%',
+                                        left: 8,
+                                        transform: 'translateY(-50%)',
+                                        backgroundColor:
+                                          'rgba(0,0,0,0.45)',
+                                        '&:hover': {
+                                          backgroundColor:
+                                            'rgba(0,0,0,0.6)'
+                                        }
+                                      }}
+                                    >
+                                      <ArrowBackIosNewIcon
+                                        sx={{
+                                          fontSize: 18,
+                                          color: '#ffffff'
+                                        }}
+                                      />
+                                    </IconButton>
+
+                                    <IconButton
+                                      size="small"
+                                      onClick={(e) =>
+                                        handleNextFeedImage(e, feed)
+                                      }
+                                      sx={{
+                                        position: 'absolute',
+                                        top: '50%',
+                                        right: 8,
+                                        transform: 'translateY(-50%)',
+                                        backgroundColor:
+                                          'rgba(0,0,0,0.45)',
+                                        '&:hover': {
+                                          backgroundColor:
+                                            'rgba(0,0,0,0.6)'
+                                        }
+                                      }}
+                                    >
+                                      <ArrowForwardIosIcon
+                                        sx={{
+                                          fontSize: 18,
+                                          color: '#ffffff'
+                                        }}
+                                      />
+                                    </IconButton>
+
+                                    <Box
+                                      sx={{
+                                        position: 'absolute',
+                                        bottom: 8,
+                                        right: 10,
+                                        backgroundColor:
+                                          'rgba(0,0,0,0.5)',
+                                        borderRadius: '999px',
+                                        paddingX: 1,
+                                        paddingY: 0.3
+                                      }}
+                                    >
+                                      <Typography
+                                        variant="caption"
+                                        sx={{
+                                          color: '#f9fafb',
+                                          fontWeight: 500
+                                        }}
+                                      >
+                                        {getFeedCurrentIndex(
+                                          feed.feedId,
+                                          feed.images.length
+                                        ) +
+                                          1 +
+                                          ' / ' +
+                                          feed.images.length}
+                                      </Typography>
+                                    </Box>
+                                  </>
+                                )}
+                              </Box>
                             )}
 
                             {/* 텍스트 + 해시태그 영역 */}
@@ -1005,7 +1177,9 @@ function Feed() {
                                     sx={{ fontSize: 20, color: '#0ea5e9' }}
                                   />
                                 ) : (
-                                  <BookmarkBorderIcon sx={{ fontSize: 20 }} />
+                                  <BookmarkBorderIcon
+                                    sx={{ fontSize: 20 }}
+                                  />
                                 )}
                               </IconButton>
                             </Box>
@@ -1348,25 +1522,114 @@ function Feed() {
         >
           {/* 왼쪽 피드 내용 영역 */}
           <Box sx={{ flex: 2 }}>
-            {selectedFeed?.imgPath && (
+            {(selectedFeed?.images &&
+              Array.isArray(selectedFeed.images) &&
+              selectedFeed.images.length > 0) ||
+            selectedFeed?.imgPath ? (
               <Box
                 sx={{
                   borderRadius: '16px',
                   overflow: 'hidden',
                   border: '1px solid #e5e7eb',
-                  mb: 2
+                  mb: 2,
+                  position: 'relative'
                 }}
               >
-                <img
-                  src={getImgUrl(selectedFeed.imgPath)}
-                  alt={selectedFeed.imgName}
-                  style={{
-                    width: '100%',
-                    display: 'block'
-                  }}
-                />
+                {/* 상세 이미지 슬라이드 */}
+                {selectedFeed?.images &&
+                Array.isArray(selectedFeed.images) &&
+                selectedFeed.images.length > 0 ? (
+                  <>
+                    <img
+                      src={getImgUrl(
+                        selectedFeed.images[selectedImgIndex].imgPath
+                      )}
+                      alt={selectedFeed.images[selectedImgIndex].imgName}
+                      style={{
+                        width: '100%',
+                        display: 'block'
+                      }}
+                    />
+
+                    {selectedFeed.images.length > 1 && (
+                      <>
+                        <IconButton
+                          size="small"
+                          onClick={handlePrevSelectedImage}
+                          sx={{
+                            position: 'absolute',
+                            top: '50%',
+                            left: 8,
+                            transform: 'translateY(-50%)',
+                            backgroundColor: 'rgba(0,0,0,0.45)',
+                            '&:hover': {
+                              backgroundColor: 'rgba(0,0,0,0.6)'
+                            }
+                          }}
+                        >
+                          <ArrowBackIosNewIcon
+                            sx={{ fontSize: 20, color: '#ffffff' }}
+                          />
+                        </IconButton>
+
+                        <IconButton
+                          size="small"
+                          onClick={handleNextSelectedImage}
+                          sx={{
+                            position: 'absolute',
+                            top: '50%',
+                            right: 8,
+                            transform: 'translateY(-50%)',
+                            backgroundColor: 'rgba(0,0,0,0.45)',
+                            '&:hover': {
+                              backgroundColor: 'rgba(0,0,0,0.6)'
+                            }
+                          }}
+                        >
+                          <ArrowForwardIosIcon
+                            sx={{ fontSize: 20, color: '#ffffff' }}
+                          />
+                        </IconButton>
+
+                        <Box
+                          sx={{
+                            position: 'absolute',
+                            bottom: 8,
+                            right: 10,
+                            backgroundColor: 'rgba(0,0,0,0.5)',
+                            borderRadius: '999px',
+                            paddingX: 1,
+                            paddingY: 0.3
+                          }}
+                        >
+                          <Typography
+                            variant="caption"
+                            sx={{
+                              color: '#f9fafb',
+                              fontWeight: 500
+                            }}
+                          >
+                            {selectedImgIndex + 1} /{' '}
+                            {selectedFeed.images.length}
+                          </Typography>
+                        </Box>
+                      </>
+                    )}
+                  </>
+                ) : (
+                  selectedFeed?.imgPath && (
+                    <img
+                      src={getImgUrl(selectedFeed.imgPath)}
+                      alt={selectedFeed.imgName}
+                      style={{
+                        width: '100%',
+                        display: 'block'
+                      }}
+                    />
+                  )
+                )}
               </Box>
-            )}
+            ) : null}
 
             <Typography
               variant="subtitle1"

@@ -22,6 +22,8 @@ import {
 } from '@mui/material';
 import ImageIcon from '@mui/icons-material/Image';
 import ArticleIcon from '@mui/icons-material/Article';
+import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
+import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
 import { jwtDecode } from "jwt-decode";
 import { useNavigate, useParams } from 'react-router-dom';
 
@@ -135,6 +137,10 @@ function MyPage() {
   // 게시글 상세보기 모달 상태
   const [detailOpen, setDetailOpen] = useState(false);
   const [selectedFeed, setSelectedFeed] = useState(null);
+  const [selectedImgIndex, setSelectedImgIndex] = useState(0);
+
+  // 마이페이지 카드용 이미지 인덱스 (피드별)
+  const [feedImageIndex, setFeedImageIndex] = useState({});
 
   const navigate = useNavigate();
 
@@ -152,7 +158,6 @@ function MyPage() {
     const loginId = decoded.userId;
     setLoginUserId(loginId);
 
-    // URL 이 /user/:userId 이면 그 아이디, 아니면 내 아이디
     const targetUserId = paramUserId || loginId;
     setIsMyPage(targetUserId === loginId);
 
@@ -166,6 +171,7 @@ function MyPage() {
         setUser(data.user);
         setFeeds(data.feeds || []);
         setIsFollowing(data.isFollowing || false);
+        setFeedImageIndex({});
       })
       .catch(err => {
         console.log(err);
@@ -186,14 +192,57 @@ function MyPage() {
   // 브론즈 이상부터 프로필 이미지 변경 가능
   const canChangeProfileImage = ['b', 's', 'g', 'e', 'a'].includes(userStatus);
 
+  // 해당 피드가 이미지가 있는지 여부
+  const hasAnyImage = (feed) => {
+    const hasList =
+      Array.isArray(feed.images) && feed.images.length > 0;
+    return hasList || !!feed.imgPath;
+  };
+
   // 보기 타입에 따라 피드 필터링
   const filteredFeeds = feeds.filter((feed) => {
     if (viewType === 'image') {
-      return !!feed.imgPath;   // 이미지 있는 글
+      return hasAnyImage(feed);
     } else {
-      return !feed.imgPath;    // 텍스트만 있는 글
+      return !hasAnyImage(feed);
     }
   });
+
+  // 피드 카드용 현재 인덱스
+  const getFeedCurrentIndex = (feedId, length) => {
+    if (!length || length <= 0) return 0;
+    const idx = feedImageIndex[feedId];
+    if (idx == null || idx < 0 || idx >= length) return 0;
+    return idx;
+  };
+
+  // 피드 카드 이미지 이전
+  const handlePrevFeedImage = (e, feed) => {
+    e.stopPropagation();
+    if (!feed || !Array.isArray(feed.images) || feed.images.length <= 1) {
+      return;
+    }
+    const len = feed.images.length;
+    setFeedImageIndex((prev) => {
+      const current = prev[feed.feedId] ?? 0;
+      const next = (current - 1 + len) % len;
+      return { ...prev, [feed.feedId]: next };
+    });
+  };
+
+  // 피드 카드 이미지 다음
+  const handleNextFeedImage = (e, feed) => {
+    e.stopPropagation();
+    if (!feed || !Array.isArray(feed.images) || feed.images.length <= 1) {
+      return;
+    }
+    const len = feed.images.length;
+    setFeedImageIndex((prev) => {
+      const current = prev[feed.feedId] ?? 0;
+      const next = (current + 1) % len;
+      return { ...prev, [feed.feedId]: next };
+    });
+  };
 
   // 팔로우 토글
   const handleToggleFollow = async () => {
@@ -302,7 +351,6 @@ function MyPage() {
       const formData = new FormData();
       formData.append("userName", editUserName.trim());
 
-      // 브론즈 이상 + 파일 선택 했으면 프로필 이미지도 전송
       if (canChangeProfileImage && profileFile) {
         formData.append("profileImg", profileFile);
       }
@@ -321,7 +369,6 @@ function MyPage() {
       if (data.result === "success") {
         alert("프로필이 수정되었습니다.");
 
-        // 화면의 user 상태 갱신
         setUser(prev => prev ? {
           ...prev,
           userName: data.user?.userName || editUserName.trim(),
@@ -341,6 +388,7 @@ function MyPage() {
   // 게시글 카드 클릭 시 상세보기 열기
   const handleOpenDetail = (feed) => {
     setSelectedFeed(feed);
+    setSelectedImgIndex(0);
     setDetailOpen(true);
   };
 
@@ -348,6 +396,33 @@ function MyPage() {
   const handleCloseDetail = () => {
     setDetailOpen(false);
     setSelectedFeed(null);
+    setSelectedImgIndex(0);
+  };
+
+  // 상세 모달 이미지 이전
+  const handlePrevSelectedImage = () => {
+    if (
+      !selectedFeed ||
+      !Array.isArray(selectedFeed.images) ||
+      selectedFeed.images.length <= 1
+    ) {
+      return;
+    }
+    const len = selectedFeed.images.length;
+    setSelectedImgIndex((prev) => (prev - 1 + len) % len);
+  };
+
+  // 상세 모달 이미지 다음
+  const handleNextSelectedImage = () => {
+    if (
+      !selectedFeed ||
+      !Array.isArray(selectedFeed.images) ||
+      selectedFeed.images.length <= 1
+    ) {
+      return;
+    }
+    const len = selectedFeed.images.length;
+    setSelectedImgIndex((prev) => (prev + 1) % len);
   };
 
   return (
@@ -415,7 +490,6 @@ function MyPage() {
                     @{user?.userId}
                   </Typography>
 
-                  {/* 남의 마이페이지일 때 팔로우 버튼 */}
                   {!isMyPage && user && (
                     <Button
                       variant={isFollowing ? "outlined" : "contained"}
@@ -431,7 +505,6 @@ function MyPage() {
                     </Button>
                   )}
 
-                  {/* 내 마이페이지일 때 프로필 수정 버튼 */}
                   {isMyPage && (
                     <Button
                       variant="outlined"
@@ -520,7 +593,6 @@ function MyPage() {
               columnGap: 1.5
             }}
           >
-            {/* 사진 보기 버튼 */}
             <Button
               onClick={() => setViewType('image')}
               startIcon={<ImageIcon sx={{ fontSize: 18 }} />}
@@ -542,7 +614,6 @@ function MyPage() {
               사진
             </Button>
 
-            {/* 텍스트 보기 버튼 */}
             <Button
               onClick={() => setViewType('text')}
               startIcon={<ArticleIcon sx={{ fontSize: 18 }} />}
@@ -568,51 +639,143 @@ function MyPage() {
           {/* 아래쪽 게시물 그리드 */}
           <Box sx={{ width: "100%", maxWidth: 1100 }}>
             <Grid container spacing={2}>
-              {filteredFeeds.map((feed) => (
-                <Grid item xs={12} sm={6} md={4} key={feed.feedId}>
-                  <Card
-                    sx={{
-                      borderRadius: "18px",
-                      cursor: "pointer"
-                    }}
-                    onClick={() => handleOpenDetail(feed)}
-                  >
-                    {/* 이미지가 있는 경우에만 출력 */}
-                    {feed.imgPath && (
-                      <CardMedia
-                        component="img"
-                        height="220"
-                        image={"http://localhost:3010" + feed.imgPath}
-                        alt={feed.title}
-                      />
-                    )}
+              {filteredFeeds.map((feed) => {
+                const hasImages =
+                  Array.isArray(feed.images) && feed.images.length > 0;
 
-                    <CardContent sx={{ p: 2 }}>
-                      <Typography
-                        variant="subtitle1"
-                        sx={{ mb: 0.5 }}
-                        noWrap
-                      >
-                        {feed.title}
-                      </Typography>
-                      <Typography
-                        variant="body2"
-                        color="text.secondary"
-                        noWrap
-                      >
-                        {feed.content}
-                      </Typography>
-                      <Typography
-                        variant="caption"
-                        color="text.secondary"
-                        sx={{ display: "block", mt: 1 }}
-                      >
-                        {formatDateTime(feed.cdatetime)}
-                      </Typography>
-                    </CardContent>
-                  </Card>
-                </Grid>
-              ))}
+                let cardImgSrc = '';
+                let cardImgAlt = '';
+
+                if (hasImages) {
+                  const len = feed.images.length;
+                  const idx = getFeedCurrentIndex(feed.feedId, len);
+                  const imgObj = feed.images[idx];
+                  if (imgObj && imgObj.imgPath) {
+                    cardImgSrc = "http://localhost:3010" + imgObj.imgPath;
+                    cardImgAlt = imgObj.imgName || feed.title;
+                  }
+                } else if (feed.imgPath) {
+                  cardImgSrc = "http://localhost:3010" + feed.imgPath;
+                  cardImgAlt = feed.title;
+                }
+
+                return (
+                  <Grid item xs={12} sm={6} md={4} key={feed.feedId}>
+                    <Card
+                      sx={{
+                        borderRadius: "18px",
+                        cursor: "pointer"
+                      }}
+                      onClick={() => handleOpenDetail(feed)}
+                    >
+                      {cardImgSrc && (
+                        <Box sx={{ position: 'relative' }}>
+                          <CardMedia
+                            component="img"
+                            height="220"
+                            image={cardImgSrc}
+                            alt={cardImgAlt}
+                          />
+
+                          {hasImages && feed.images.length > 1 && (
+                            <>
+                              <Button
+                                onClick={(e) => handlePrevFeedImage(e, feed)}
+                                sx={{
+                                  minWidth: 0,
+                                  position: 'absolute',
+                                  top: '50%',
+                                  left: 6,
+                                  transform: 'translateY(-50%)',
+                                  borderRadius: '999px',
+                                  padding: 0.3,
+                                  backgroundColor: 'rgba(0,0,0,0.45)',
+                                  '&:hover': {
+                                    backgroundColor: 'rgba(0,0,0,0.6)'
+                                  }
+                                }}
+                              >
+                                <ArrowBackIosNewIcon
+                                  sx={{ fontSize: 16, color: '#ffffff' }}
+                                />
+                              </Button>
+
+                              <Button
+                                onClick={(e) => handleNextFeedImage(e, feed)}
+                                sx={{
+                                  minWidth: 0,
+                                  position: 'absolute',
+                                  top: '50%',
+                                  right: 6,
+                                  transform: 'translateY(-50%)',
+                                  borderRadius: '999px',
+                                  padding: 0.3,
+                                  backgroundColor: 'rgba(0,0,0,0.45)',
+                                  '&:hover': {
+                                    backgroundColor: 'rgba(0,0,0,0.6)'
+                                  }
+                                }}
+                              >
+                                <ArrowForwardIosIcon
+                                  sx={{ fontSize: 16, color: '#ffffff' }}
+                                />
+                              </Button>
+
+                              <Box
+                                sx={{
+                                  position: 'absolute',
+                                  bottom: 6,
+                                  right: 8,
+                                  backgroundColor: 'rgba(0,0,0,0.5)',
+                                  borderRadius: '999px',
+                                  paddingX: 0.8,
+                                  paddingY: 0.2
+                                }}
+                              >
+                                <Typography
+                                  variant="caption"
+                                  sx={{ color: '#f9fafb' }}
+                                >
+                                  {getFeedCurrentIndex(
+                                    feed.feedId,
+                                    feed.images.length
+                                  ) + 1}
+                                  {' / '}
+                                  {feed.images.length}
+                                </Typography>
+                              </Box>
+                            </>
+                          )}
+                        </Box>
+                      )}
+
+                      <CardContent sx={{ p: 2 }}>
+                        <Typography
+                          variant="subtitle1"
+                          sx={{ mb: 0.5 }}
+                          noWrap
+                        >
+                          {feed.title}
+                        </Typography>
+                        <Typography
+                          variant="body2"
+                          color="text.secondary"
+                          noWrap
+                        >
+                          {feed.content}
+                        </Typography>
+                        <Typography
+                          variant="caption"
+                          color="text.secondary"
+                          sx={{ display: "block", mt: 1 }}
+                        >
+                          {formatDateTime(feed.cdatetime)}
+                        </Typography>
+                      </CardContent>
+                    </Card>
+                  </Grid>
+                );
+              })}
 
               {filteredFeeds.length === 0 && (
                 <Grid item xs={12}>
@@ -639,22 +802,114 @@ function MyPage() {
         <DialogContent dividers>
           {selectedFeed && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              {/* 이미지 */}
-              {selectedFeed.imgPath && (
+              {/* 이미지 영역 (여러 장일 경우 슬라이드) */}
+              {(selectedFeed.images &&
+                Array.isArray(selectedFeed.images) &&
+                selectedFeed.images.length > 0) ||
+              selectedFeed.imgPath ? (
                 <Box
                   sx={{
                     borderRadius: 2,
                     overflow: 'hidden',
-                    border: "1px solid #e5e7eb"
+                    border: "1px solid #e5e7eb",
+                    position: 'relative'
                   }}
                 >
-                  <img
-                    src={"http://localhost:3010" + selectedFeed.imgPath}
-                    alt={selectedFeed.title}
-                    style={{ width: "100%", display: "block" }}
-                  />
+                  {selectedFeed.images &&
+                  Array.isArray(selectedFeed.images) &&
+                  selectedFeed.images.length > 0 ? (
+                    <>
+                      <img
+                        src={
+                          "http://localhost:3010" +
+                          selectedFeed.images[selectedImgIndex].imgPath
+                        }
+                        alt={
+                          selectedFeed.images[selectedImgIndex].imgName ||
+                          selectedFeed.title
+                        }
+                        style={{ width: "100%", display: "block" }}
+                      />
+
+                      {selectedFeed.images.length > 1 && (
+                        <>
+                          <Button
+                            onClick={handlePrevSelectedImage}
+                            sx={{
+                              minWidth: 0,
+                              position: 'absolute',
+                              top: '50%',
+                              left: 6,
+                              transform: 'translateY(-50%)',
+                              borderRadius: '999px',
+                              padding: 0.3,
+                              backgroundColor: 'rgba(0,0,0,0.45)',
+                              '&:hover': {
+                                backgroundColor: 'rgba(0,0,0,0.6)'
+                              }
+                            }}
+                          >
+                            <ArrowBackIosNewIcon
+                              sx={{ fontSize: 18, color: '#ffffff' }}
+                            />
+                          </Button>
+
+                          <Button
+                            onClick={handleNextSelectedImage}
+                            sx={{
+                              minWidth: 0,
+                              position: 'absolute',
+                              top: '50%',
+                              right: 6,
+                              transform: 'translateY(-50%)',
+                              borderRadius: '999px',
+                              padding: 0.3,
+                              backgroundColor: 'rgba(0,0,0,0.45)',
+                              '&:hover': {
+                                backgroundColor: 'rgba(0,0,0,0.6)'
+                              }
+                            }}
+                          >
+                            <ArrowForwardIosIcon
+                              sx={{ fontSize: 18, color: '#ffffff' }}
+                            />
+                          </Button>
+
+                          <Box
+                            sx={{
+                              position: 'absolute',
+                              bottom: 6,
+                              right: 8,
+                              backgroundColor: 'rgba(0,0,0,0.5)',
+                              borderRadius: '999px',
+                              paddingX: 0.8,
+                              paddingY: 0.2
+                            }}
+                          >
+                            <Typography
+                              variant="caption"
+                              sx={{ color: '#f9fafb' }}
+                            >
+                              {selectedImgIndex + 1} /{" "}
+                              {selectedFeed.images.length}
+                            </Typography>
+                          </Box>
+                        </>
+                      )}
+                    </>
+                  ) : (
+                    selectedFeed.imgPath && (
+                      <img
+                        src={
+                          "http://localhost:3010" + selectedFeed.imgPath
+                        }
+                        alt={selectedFeed.title}
+                        style={{ width: "100%", display: "block" }}
+                      />
+                    )
+                  )}
                 </Box>
-              )}
+              ) : null}
 
               {/* 내용 */}
               <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap' }}>

@@ -42,6 +42,55 @@ function getLoginUserId(req) {
   }
 }
 
+// feed.js 와 동일한 형태로 피드 리스트를 묶어주는 함수
+function buildFeedList(rows) {
+  const map = new Map();
+
+  rows.forEach((row) => {
+    if (!map.has(row.feedId)) {
+      map.set(row.feedId, {
+        feedId: row.feedId,
+        userId: row.userId,
+        userName: row.userName,
+        status: row.status,
+        profileImgPath: row.profileImgPath,
+        title: row.title,
+        content: row.content,
+        feedType: row.feedType,
+        viewCnt: row.viewCnt,
+        cdatetime: row.cdatetime,
+        udatetime: row.udatetime,
+        hash: row.hash,
+        likeCount: row.likeCount || 0,
+        liked: row.liked === 1,
+        bookmarkCount: row.bookmarkCount || 0,
+        bookmarked: row.bookmarked === 1,
+        imgPath: null,
+        imgName: null,
+        images: [],
+        tagScore: 0
+      });
+    }
+
+    const feed = map.get(row.feedId);
+
+    if (row.imgId) {
+      feed.images.push({
+        imgId: row.imgId,
+        imgName: row.imgName,
+        imgPath: row.imgPath
+      });
+
+      if (!feed.imgPath) {
+        feed.imgPath = row.imgPath;
+        feed.imgName = row.imgName;
+      }
+    }
+  });
+
+  return Array.from(map.values());
+}
+
 /**
  * 회원가입
  * POST /user/join
@@ -130,7 +179,6 @@ router.post("/login", async (req, res) => {
       });
     }
 
-    // JWT 발급
     const token = jwt.sign(
       {
         userId: user.userId
@@ -166,9 +214,8 @@ router.post("/login", async (req, res) => {
 });
 
 /**
- * 내 정보 조회 (옵션)
+ * 내 정보 조회
  * GET /user/me
- * 헤더: Authorization: Bearer 토큰
  */
 router.get("/me", authMiddleware, async (req, res) => {
   const loginUserId = req.user.userId;
@@ -197,10 +244,6 @@ router.get("/me", authMiddleware, async (req, res) => {
 /**
  * 프로필 수정 (닉네임 + 프로필 이미지)
  * PUT /user/profile
- * 헤더: Authorization: Bearer 토큰
- * body(form-data):
- *   - userName (text)
- *   - profileImg (file, 선택)
  */
 router.put("/profile", authMiddleware, upload.single("profileImg"), async (req, res) => {
   const loginUserId = req.user.userId;
@@ -215,7 +258,6 @@ router.put("/profile", authMiddleware, upload.single("profileImg"), async (req, 
   }
 
   try {
-    // 기존 유저 정보 조회
     const [rows] = await db.query(
       "SELECT * FROM tbl_user WHERE userId = ?",
       [loginUserId]
@@ -231,7 +273,6 @@ router.put("/profile", authMiddleware, upload.single("profileImg"), async (req, 
 
     let profileImgPath = user.profileImgPath;
 
-    // 브론즈 이상부터 프로필 이미지 변경 가능 (b, s, g, e, a)
     const status = (user.status || 'c').toLowerCase();
     const canChangeProfileImage = ['b', 's', 'g', 'e', 'a'].includes(status);
 
@@ -267,12 +308,10 @@ router.put("/profile", authMiddleware, upload.single("profileImg"), async (req, 
 /**
  * 유저 정보 조회 + 해당 유저 게시물 목록 조회
  * GET /user/:userId
- *  - URL 파라미터: :userId (페이지 주인)
- *  - 헤더 토큰 있으면: 로그인 유저 기준으로 isFollowing 계산
  */
 router.get("/:userId", async (req, res) => {
   let { userId } = req.params;
-  const loginUserId = getLoginUserId(req); // 없으면 null
+  const loginUserId = getLoginUserId(req);
 
   try {
     // 유저 기본 정보 + 게시물 개수
@@ -294,20 +333,20 @@ router.get("/:userId", async (req, res) => {
       return res.status(404).json({ result: "fail", msg: "유저가 존재하지 않습니다." });
     }
 
-    // 유저가 작성한 게시물 목록 + 썸네일 이미지 경로 (+ hash 추가)
+    // 유저가 작성한 게시물 목록 + 모든 이미지 (feed.js 와 동일한 구조)
     let sqlFeed =
-      "SELECT F.feedId, F.title, F.content, F.hash, F.feedType, F.viewCnt, " +
-      "       F.cdatetime, F.udatetime, T.imgPath " +
+      "SELECT F.*, " +
+      "       I.imgId, I.imgName, I.imgPath, " +
+      "       U.userName, U.status, U.profileImgPath " +
       "FROM tbl_feed F " +
-      "LEFT JOIN ( " +
-      "   SELECT feedId, MIN(imgPath) AS imgPath " +
-      "   FROM tbl_feed_img " +
-      "   GROUP BY feedId " +
-      ") T ON F.feedId = T.feedId " +
+      "LEFT JOIN tbl_feed_img I ON F.feedId = I.feedId " +
+      "JOIN tbl_user U ON F.userId = U.userId " +
       "WHERE F.userId = ? " +
       "ORDER BY F.cdatetime DESC";
 
-    let [feedList] = await db.query(sqlFeed, [userId]);
+    let [feedRows] = await db.query(sqlFeed, [userId]);
+
+    const feedList = buildFeedList(feedRows);
 
     // 로그인 되어 있으면 이 유저를 팔로우 중인지 여부 확인
     let isFollowing = false;
@@ -335,7 +374,6 @@ router.get("/:userId", async (req, res) => {
 /**
  * 팔로우 토글
  * POST /user/:userId/follow
- * 헤더: Authorization: Bearer 토큰
  */
 router.post("/:userId/follow", authMiddleware, async (req, res) => {
   const { userId: targetUserId } = req.params;
@@ -349,7 +387,6 @@ router.post("/:userId/follow", authMiddleware, async (req, res) => {
       });
     }
 
-    // 이미 팔로우 중인지 확인
     let [rows] = await db.query(
       "SELECT * FROM tbl_follow WHERE followerId = ? AND followingId = ?",
       [loginUserId, targetUserId]
@@ -358,14 +395,12 @@ router.post("/:userId/follow", authMiddleware, async (req, res) => {
     let isFollowing;
 
     if (rows.length > 0) {
-      // 이미 팔로우 → 언팔
       await db.query(
         "DELETE FROM tbl_follow WHERE followerId = ? AND followingId = ?",
         [loginUserId, targetUserId]
       );
       isFollowing = false;
     } else {
-      // 아직 안 팔로우 → 팔로우 추가
       await db.query(
         "INSERT INTO tbl_follow (followerId, followingId) VALUES (?, ?)",
         [loginUserId, targetUserId]
@@ -373,7 +408,6 @@ router.post("/:userId/follow", authMiddleware, async (req, res) => {
       isFollowing = true;
     }
 
-    // 최신 팔로워 수 / 팔로잉 수 재계산
     let [followerRows] = await db.query(
       "SELECT COUNT(*) AS cnt FROM tbl_follow WHERE followingId = ?",
       [targetUserId]
