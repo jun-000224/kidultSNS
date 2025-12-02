@@ -26,7 +26,7 @@ const upload = multer({
     limits: { files: 5 },
 });
 
-// 공통: SELECT 결과 → 피드 리스트로 묶어주는 함수
+// 공통: SELECT 결과를 피드 리스트로 묶어주는 함수
 function buildFeedList(rows) {
     const map = new Map();
 
@@ -50,6 +50,8 @@ function buildFeedList(rows) {
                 imgPath: null,
                 imgName: null,
                 images: [],
+                // 태그 점수용 필드 (초기값 0)
+                tagScore: 0,
             });
         }
 
@@ -73,11 +75,58 @@ function buildFeedList(rows) {
     return Array.from(map.values());
 }
 
+// 해시태그 문자열을 태그 배열로 변환하는 함수
+// "#포켓몬 #건프라 #피규어" → ["포켓몬", "건프라", "피규어"]
+function parseTags(hashString) {
+    if (!hashString) return [];
+
+    return hashString
+        .split("#")
+        .map((t) => t.replace(/[\s\r\n]+/g, " ").trim())
+        .filter((t) => t.length > 0);
+}
+
+// 특정 유저가 특정 피드의 태그에 대해 점수를 증감시키는 함수
+// delta 는 증가 또는 감소 값
+async function updateUserTagScoreByFeed(userId, feedId, delta) {
+    try {
+        // 피드의 해시태그 가져오기
+        const [feedRows] = await db.query(
+            "SELECT hash FROM tbl_feed WHERE feedId = ?",
+            [feedId]
+        );
+
+        if (!feedRows || feedRows.length === 0) {
+            return;
+        }
+
+        const hash = feedRows[0].hash;
+        const tags = parseTags(hash);
+
+        if (!tags || tags.length === 0) {
+            return;
+        }
+
+        // 각 태그에 대해 점수 upsert
+        // score 컬럼 기준, 음수가 되지 않도록 처리
+        for (const tag of tags) {
+            await db.query(
+                "INSERT INTO tbl_user_tag_score (userId, tag, score) " +
+                "VALUES (?, ?, ?) " +
+                "ON DUPLICATE KEY UPDATE " +
+                "  score = CASE WHEN score + VALUES(score) < 0 THEN 0 ELSE score + VALUES(score) END",
+                [userId, tag, delta]
+            );
+        }
+    } catch (err) {
+        // 점수 적립 실패해도 메인 로직은 계속 진행
+        console.log("updateUserTagScoreByFeed error:", err);
+    }
+}
+
 /**
  * 1) 전체 피드 목록 (알고리즘 정렬된 타임라인)
  *  - URL: GET /feed/feedAll
- *  - 헤더에 토큰 필수: Authorization: Bearer xxx
- *  - 좋아요 수 / 내 좋아요 여부 / 북마크 수 / 내 북마크 여부 포함
  */
 router.get("/feedAll", authMiddleware, async (req, res) => {
     const loginUserId = req.user.userId;
@@ -94,25 +143,21 @@ router.get("/feedAll", authMiddleware, async (req, res) => {
             "FROM tbl_feed F " +
             "LEFT JOIN tbl_feed_img I ON F.feedId = I.feedId " +
             "JOIN tbl_user U ON F.userId = U.userId " +
-            // 전체 좋아요 수
             "LEFT JOIN ( " +
             "   SELECT feedId, COUNT(*) AS cntLike " +
             "   FROM tbl_feed_like " +
             "   GROUP BY feedId " +
             ") L ON F.feedId = L.feedId " +
-            // 내가 좋아요 눌렀는지
             "LEFT JOIN ( " +
             "   SELECT feedId, 1 AS liked " +
             "   FROM tbl_feed_like " +
             "   WHERE userId = ? " +
             ") UL ON F.feedId = UL.feedId " +
-            // 전체 북마크 수
             "LEFT JOIN ( " +
             "   SELECT feedId, COUNT(*) AS cntBookmark " +
             "   FROM tbl_feed_bookmark " +
             "   GROUP BY feedId " +
             ") B ON F.feedId = B.feedId " +
-            // 내가 북마크 했는지
             "LEFT JOIN ( " +
             "   SELECT feedId, 1 AS bookmarked " +
             "   FROM tbl_feed_bookmark " +
@@ -122,6 +167,45 @@ router.get("/feedAll", authMiddleware, async (req, res) => {
 
         const [rows] = await db.query(sql, [loginUserId, loginUserId]);
         const list = buildFeedList(rows);
+
+        // 로그인 유저의 태그 점수 조회
+        let tagScoreMap = new Map();
+        try {
+            const [tagRows] = await db.query(
+                "SELECT tag, score FROM tbl_user_tag_score WHERE userId = ?",
+                [loginUserId]
+            );
+            tagRows.forEach((r) => {
+                tagScoreMap.set(r.tag, r.score || 0);
+            });
+        } catch (tagErr) {
+            console.log("tag score select error(feedAll):", tagErr);
+        }
+
+        // 각 피드별 태그 점수 계산
+        list.forEach((feed) => {
+            const tags = parseTags(feed.hash);
+            let total = 0;
+
+            tags.forEach((t) => {
+                const s = tagScoreMap.get(t);
+                if (typeof s === "number" && s > 0) {
+                    total += s;
+                }
+            });
+
+            feed.tagScore = total;
+        });
+
+        // tagScore 기준 내림차순, 동점일 때는 최신순
+        list.sort((a, b) => {
+            if (b.tagScore !== a.tagScore) {
+                return b.tagScore - a.tagScore;
+            }
+            const aTime = a.cdatetime ? new Date(a.cdatetime).getTime() : 0;
+            const bTime = b.cdatetime ? new Date(b.cdatetime).getTime() : 0;
+            return bTime - aTime;
+        });
 
         res.json({ result: "success", list });
     } catch (err) {
@@ -133,7 +217,6 @@ router.get("/feedAll", authMiddleware, async (req, res) => {
 /**
  * 2) 피드 검색
  *  - URL: POST /feed/search
- *  - body: { search: "키워드" }
  */
 router.post("/search", authMiddleware, async (req, res) => {
     const loginUserId = req.user.userId;
@@ -207,7 +290,7 @@ router.get("/bookmarks", authMiddleware, async (req, res) => {
             "       IFNULL(L.cntLike, 0) AS likeCount, " +
             "       IFNULL(UL.liked, 0) AS liked, " +
             "       IFNULL(B.cntBookmark, 0) AS bookmarkCount, " +
-            "       1 AS bookmarked " + // 내 북마크 목록이니까 항상 1
+            "       1 AS bookmarked " +
             "FROM tbl_feed_bookmark BK " +
             "JOIN tbl_feed F ON BK.feedId = F.feedId " +
             "LEFT JOIN tbl_feed_img I ON F.feedId = I.feedId " +
@@ -253,8 +336,16 @@ router.post("/", async (req, res) => {
             "VALUES (?, ?, ?, 'NORMAL', ?)";
 
         const [result] = await db.query(sql, [userId, title, content, hash]);
+        const feedId = result.insertId;
 
-        res.json({ result: "success", feedId: result.insertId, msg: "success" });
+        // 작성자의 태그 점수도 약하게 반영
+        try {
+            await updateUserTagScoreByFeed(userId, feedId, 1);
+        } catch (innerErr) {
+            console.log("tag score update error(write text):", innerErr);
+        }
+
+        res.json({ result: "success", feedId, msg: "success" });
     } catch (err) {
         console.log("feed insert error:", err);
         res.status(500).json({ result: "fail" });
@@ -288,6 +379,13 @@ router.post("/write", upload.array("file", 5), async (req, res) => {
                 "VALUES (?, ?, ?)";
             const [r] = await db.query(q, [feedId, filename, imgPath]);
             imgResults.push(r);
+        }
+
+        // 작성자의 태그 점수도 약하게 반영
+        try {
+            await updateUserTagScoreByFeed(userId, feedId, 1);
+        } catch (innerErr) {
+            console.log("tag score update error(write):", innerErr);
         }
 
         res.json({
@@ -376,6 +474,8 @@ router.delete("/:feedId", authMiddleware, async (req, res) => {
 /**
  * 9) 좋아요 토글
  *  - URL: POST /feed/:feedId/like
+ *  - 좋아요 ON 시 태그 점수 +3, OFF 시 -3
+ *  - 좋아요 ON 시 알림 생성
  */
 router.post("/:feedId/like", authMiddleware, async (req, res) => {
     const { feedId } = req.params;
@@ -404,6 +504,37 @@ router.post("/:feedId/like", authMiddleware, async (req, res) => {
                 [feedId, userId]
             );
             liked = true;
+
+            // 좋아요 알림 생성 (본인 글이 아닐 때만)
+            try {
+                const [feedRows] = await db.query(
+                    "SELECT userId FROM tbl_feed WHERE feedId = ?",
+                    [feedId]
+                );
+
+                if (feedRows.length > 0) {
+                    const ownerId = feedRows[0].userId;
+
+                    if (ownerId !== userId) {
+                        await db.query(
+                            "INSERT INTO tbl_notification " +
+                            "  (receiverId, senderId, type, feedId, isRead) " +
+                            "VALUES (?, ?, 'LIKE', ?, 0)",
+                            [ownerId, userId, feedId]
+                        );
+                    }
+                }
+            } catch (notiErr) {
+                console.log("like notification insert error:", notiErr);
+            }
+        }
+
+        // 태그 점수 반영
+        try {
+            const delta = liked ? 3 : -3;
+            await updateUserTagScoreByFeed(userId, feedId, delta);
+        } catch (innerErr) {
+            console.log("tag score update error(like):", innerErr);
         }
 
         // 최신 좋아요 수
@@ -453,6 +584,14 @@ router.post("/:feedId/bookmark", authMiddleware, async (req, res) => {
             bookmarked = true;
         }
 
+        // 태그 점수 반영
+        try {
+            const delta = bookmarked ? 5 : -5;
+            await updateUserTagScoreByFeed(userId, feedId, delta);
+        } catch (innerErr) {
+            console.log("tag score update error(bookmark):", innerErr);
+        }
+
         res.json({ result: "success", bookmarked });
     } catch (err) {
         console.log("bookmark toggle error:", err);
@@ -476,7 +615,6 @@ router.get("/bookmark/list", authMiddleware, async (req, res) => {
 
         const [rows] = await db.query(sql, [userId]);
 
-        // feedId 중복 제거나 이미지 합치기
         let feedMap = new Map();
 
         rows.forEach(row => {

@@ -43,10 +43,10 @@ function Join() {
           inputRef={pwd}
         />
 
-        {/* 닉네임 또는 이름 */}
+        {/* 닉네임 */}
         <TextField
           inputRef={userName}
-          label="이름"
+          label="닉네임"
           variant="outlined"
           margin="normal"
           fullWidth

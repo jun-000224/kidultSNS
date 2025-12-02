@@ -25,15 +25,45 @@ import ArticleIcon from '@mui/icons-material/Article';
 import { jwtDecode } from "jwt-decode";
 import { useNavigate, useParams } from 'react-router-dom';
 
-// 활동 등급에 따른 프로필 테두리 색상
-function getGradeBorderColor(feedCnt) {
-  const count = feedCnt || 0;
+/**
+ * 등급(status)별 프로필 테두리/광택 스타일
+ *  c: 일반, b: 브론즈, s: 실버, g: 골드, e: 에메랄드, a: 관리자
+ */
+function ColorByStatus(status) {
+  const s = (status || 'c').toLowerCase();
 
-  if (count >= 40) return '#38bdf8';   // 다이아
-  if (count >= 30) return '#facc15';   // 골드
-  if (count >= 20) return '#e5e7eb';   // 실버
-  if (count >= 10) return '#b45309';   // 브론즈
-  return '#111827';                    // 기본(블랙)
+  // 기본(검정) 공통 베이스
+  let border = '2px solid #111827';
+  let boxShadow = '0 0 0 2px rgba(17,24,39,0.5)';
+
+  if (s === 'b') {
+    // 브론즈
+    border = '2px solid #b45309';
+    boxShadow =
+      '0 0 0 2px rgba(180,83,9,0.5), 0 0 16px rgba(180,83,9,0.7)';
+  } else if (s === 's') {
+    // 실버
+    border = '2px solid #e5e7eb';
+    boxShadow =
+      '0 0 0 2px rgba(209,213,219,0.6), 0 0 18px rgba(156,163,175,0.9)';
+  } else if (s === 'g') {
+    // 골드 (좀 더 노란 느낌 + 반짝)
+    border = '2px solid #facc15';
+    boxShadow =
+      '0 0 0 2px rgba(250,204,21,0.8), 0 0 22px rgba(245,158,11,0.95)';
+  } else if (s === 'e') {
+    // 에메랄드
+    border = '2px solid #22c55e';
+    boxShadow =
+      '0 0 0 2px rgba(34,197,94,0.7), 0 0 20px rgba(16,185,129,0.9)';
+  } else if (s === 'a') {
+    // 관리자 (보라 계열)
+    border = '2px solid #a855f7';
+    boxShadow =
+      '0 0 0 2px rgba(168,85,247,0.8), 0 0 24px rgba(129,140,248,0.95)';
+  }
+
+  return { border, boxShadow };
 }
 
 function MyPage() {
@@ -108,10 +138,15 @@ function MyPage() {
     fnGetUser();
   }, [paramUserId]);
 
-  // 활동 횟수 (등급 계산용)
+  // 등급/프로필 조건 (status 기준)
+  const userStatus = (user?.status || 'c').toLowerCase();
+  const avatarStyle = ColorByStatus(userStatus);
+
+  // 활동 글 수 (표시용)
   const activityCount = user?.feedCnt ?? feeds.length;
-  const gradeBorderColor = getGradeBorderColor(activityCount);
-  const canChangeProfileImage = activityCount >= 10; // 브론즈 이상이면 true
+
+  // 브론즈 이상부터 프로필 이미지 변경 가능
+  const canChangeProfileImage = ['b', 's', 'g', 'e', 'a'].includes(userStatus);
 
   // 보기 타입에 따라 피드 필터링
   const filteredFeeds = feeds.filter((feed) => {
@@ -309,9 +344,9 @@ function MyPage() {
                 sx={{
                   width: 80,
                   height: 80,
-                  border: `2px solid ${gradeBorderColor}`,
                   boxSizing: "border-box",
-                  flexShrink: 0
+                  flexShrink: 0,
+                  ...avatarStyle
                 }}
               />
 
@@ -377,7 +412,8 @@ function MyPage() {
                     variant="caption"
                     sx={{ mt: 0.5, display: 'block', color: '#6b7280' }}
                   >
-                    활동 글 {activityCount}개 · {activityCount >= 10 ? '브론즈 이상 등급입니다.' : '10개 이상 작성 시 프로필 사진을 직접 등록할 수 있어요.'}
+                    활동 글 {activityCount}개 · 브론즈 등급(b)부터 프로필 사진을 직접
+                    등록할 수 있어요.
                   </Typography>
                 )}
               </Box>
@@ -628,7 +664,7 @@ function MyPage() {
         </DialogActions>
       </Dialog>
 
-      {/* ✅ 프로필 수정 모달 */}
+      {/* 프로필 수정 모달 */}
       <Dialog
         open={openProfileEdit}
         onClose={handleCloseProfileEdit}
@@ -660,7 +696,11 @@ function MyPage() {
                       ? "http://localhost:3010" + user.profileImgPath
                       : "http://localhost:3010/uploads/userDefault.png")
                   }
-                  sx={{ width: 60, height: 60 }}
+                  sx={{
+                    width: 60,
+                    height: 60,
+                    ...avatarStyle
+                  }}
                 />
 
                 <Box>
@@ -685,7 +725,7 @@ function MyPage() {
                   >
                     {canChangeProfileImage
                       ? '프로필 사진을 변경할 수 있습니다.'
-                      : '작성 글 10개 이상(브론즈 등급)부터 프로필 사진을 등록할 수 있어요.'}
+                      : '브론즈 등급(b) 이상부터 프로필 사진을 등록할 수 있어요.'}
                   </Typography>
                 </Box>
               </Box>

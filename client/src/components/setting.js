@@ -1,19 +1,30 @@
 import { Box } from "@mui/material";
 import { useNavigate, useNavigation } from "react-router-dom";
+import { Button } from "@mui/material";
 
 function Setting() {
     let navigate = useNavigate();
     return (
         <Box>
-            {/* 로그인 버튼 */}
+
+            {/* 모드 버튼 */}
+            <Button
+            onClick={() => {
+                let param = {
+
+                }
+            }}>
+
+                라이트모드 / 다크모드 
+            </Button>
+
+            {/* 로그아웃 버튼 */}
             <Button
                 onClick={() => {
                     let param = {
-                        userId: idRef.current.value,
-                        pwd: pwdRef.current.value
                     };
 
-                    fetch("http://localhost:3010/user/login", {
+                    fetch("http://localhost:3010/user/logout", {
                         method: "POST",
                         headers: {
                             "Content-type": "application/json"
@@ -25,8 +36,8 @@ function Setting() {
                             console.log(data);
                             alert(data.msg);
                             if (data.result) {
-                                localStorage.setItem("token", data.token);
-                                navigate("/feed");
+                                localStorage.setItem("token", "");
+                                navigate("/");
                             }
                         })
                 }}
@@ -42,7 +53,7 @@ function Setting() {
                     fontSize: '1rem'
                 }}
             >
-                로그인
+                로그아웃
             </Button>
         </Box>
     );

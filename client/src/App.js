@@ -26,9 +26,9 @@ function App() {
           <Route path="/join" element={<Join />} />
 
           {/* 홈(전체 피드) */}
-          <Route path="/feedAll" element={<Feed />} />
+          <Route path="/feedAll" element={<Feed key="feedAll" />} />
           {/* 파도타기(랜덤 or 알고리즘 피드) */}
-          <Route path="/feed" element={<Feed />} />
+          <Route path="/feed" element={<Feed key="feedSurf" />} />
 
           <Route path="/register" element={<Register />} />
 
@@ -41,7 +41,6 @@ function App() {
           <Route path="/setting" element={<Setting />} />
 
           <Route path="/bookmark" element={<BookmarkFeed />} />
-
         </Routes>
       </Box>
     </Box>

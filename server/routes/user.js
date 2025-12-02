@@ -4,7 +4,7 @@ const bcrypt = require('bcrypt');
 const router = express.Router();
 const db = require("../db");
 const jwt = require('jsonwebtoken');
-const authMiddleware = require("../auth");  // ✅ 좋아요처럼 인증 미들웨어 사용
+const authMiddleware = require("../auth");
 
 const JWT_KEY = "server_secret_key";
 
@@ -27,15 +27,12 @@ function getLoginUserId(req) {
 /**
  * 유저 정보 조회 + 해당 유저 게시물 목록 조회
  * GET /user/:userId
- * - 로그인 여부 상관 없이 조회 가능
- * - 단, 로그인 되어 있으면 isFollowing 여부까지 내려줌
  */
 router.get("/:userId", async (req, res) => {
     let { userId } = req.params;
-    const loginUserId = getLoginUserId(req); // 없으면 null
+    const loginUserId = getLoginUserId(req);
 
     try {
-        // 유저 기본 정보 + 게시물 개수
         let sqlUser =
             "SELECT U.userId, U.pwd, U.userName, U.addr, U.phone, " +
             "       U.cdatetime, U.udatetime, U.follower, U.following, " +
@@ -54,7 +51,6 @@ router.get("/:userId", async (req, res) => {
             return res.status(404).json({ result: "fail", msg: "유저가 존재하지 않습니다." });
         }
 
-        // 유저가 작성한 게시물 목록 + 썸네일 이미지 경로
         let sqlFeed =
             "SELECT F.feedId, F.title, F.content, F.feedType, F.viewCnt, " +
             "       F.cdatetime, F.udatetime, T.imgPath " +
@@ -69,7 +65,6 @@ router.get("/:userId", async (req, res) => {
 
         let [feedList] = await db.query(sqlFeed, [userId]);
 
-        // 로그인 되어 있으면 이 유저를 팔로우 중인지 여부 확인
         let isFollowing = false;
         if (loginUserId) {
             let [followRows] = await db.query(
@@ -95,12 +90,10 @@ router.get("/:userId", async (req, res) => {
 /**
  * 팔로우 토글
  * POST /user/:userId/follow
- * - 토큰 필수 (authMiddleware)
- * - 자기 자신은 팔로우 불가
  */
 router.post("/:userId/follow", authMiddleware, async (req, res) => {
     const { userId: targetUserId } = req.params;   // 팔로우 당하는 사람
-    const loginUserId = req.user.userId;          // 토큰에서 꺼낸 로그인 유저 (팔로우 하는 사람)
+    const loginUserId = req.user.userId;          // 팔로우 하는 사람
 
     try {
         if (loginUserId === targetUserId) {
@@ -132,24 +125,33 @@ router.post("/:userId/follow", authMiddleware, async (req, res) => {
                 [loginUserId, targetUserId]
             );
             isFollowing = true;
+
+            // 팔로우 알림 생성 (상대에게)
+            try {
+                await db.query(
+                    "INSERT INTO tbl_notification " +
+                    "  (receiverId, senderId, type, feedId, isRead) " +
+                    "VALUES (?, ?, 'FOLLOW', NULL, 0)",
+                    [targetUserId, loginUserId]
+                );
+            } catch (notiErr) {
+                console.log("follow notification insert error:", notiErr);
+            }
         }
 
         // 최신 팔로워 수 / 팔로잉 수 재계산
-        // targetUser(팔로우 당하는 사람)의 follower 수
         let [followerRows] = await db.query(
             "SELECT COUNT(*) AS cnt FROM tbl_follow WHERE followingId = ?",
             [targetUserId]
         );
         const followerCount = followerRows[0]?.cnt || 0;
 
-        // 로그인 유저의 following 수
         let [followingRows] = await db.query(
             "SELECT COUNT(*) AS cnt FROM tbl_follow WHERE followerId = ?",
             [loginUserId]
         );
         const followingCount = followingRows[0]?.cnt || 0;
 
-        // tbl_user에 반영
         await db.query(
             "UPDATE tbl_user SET follower = ? WHERE userId = ?",
             [followerCount, targetUserId]
@@ -173,7 +175,6 @@ router.post("/:userId/follow", authMiddleware, async (req, res) => {
 
 /**
  * 팔로워 리스트
- * GET /user/:userId/followers
  */
 router.get("/:userId/followers", async (req, res) => {
     const { userId } = req.params;
@@ -200,7 +201,6 @@ router.get("/:userId/followers", async (req, res) => {
 
 /**
  * 팔로잉 리스트
- * GET /user/:userId/following
  */
 router.get("/:userId/following", async (req, res) => {
     const { userId } = req.params;
@@ -232,10 +232,8 @@ router.post("/join", async (req, res) => {
     let { userId, pwd, userName, addr, phone } = req.body;
 
     try {
-        // 비밀번호 암호화
         let hashPwd = await bcrypt.hash(pwd, 10);
 
-        // 아이디, 비밀번호, 이름, 주소, 전화번호 저장
         let sql = `
             INSERT INTO tbl_user (userId, pwd, userName, addr, phone)
             VALUES (?, ?, ?, ?, ?)
@@ -274,7 +272,53 @@ router.post("/login", async (req, res) => {
                 msg = list[0].userName + "님 환영합니다!";
                 result = true;
 
-                // 토큰에 들어가는 정보
+                let user = {
+                    userId: list[0].userId,
+                    userName: list[0].userName,
+                    status: "A"
+                };
+
+                token = jwt.sign(user, JWT_KEY, { expiresIn: '1h' });
+            } else {
+                msg = "패스워드를 확인해주세요.";
+            }
+        } else {
+            msg = "아이디가 존재하지 않습니다.";
+        }
+
+        res.json({
+            result: result,
+            msg: msg,
+            token: token
+        });
+
+    } catch (error) {
+        console.log(error);
+        res.status(500).json({ result: "fail" });
+    }
+});
+
+/**
+ * 로그아웃 (현재는 토큰 제거는 프론트에서 처리)
+ */
+router.post("/logout", async (req, res) => {
+    let { userId, pwd } = req.body;
+
+    try {
+        let sql = "SELECT * FROM tbl_user WHERE userId = ?";
+        let [list] = await db.query(sql, [userId]);
+
+        let msg = "";
+        let result = false;
+        let token = null;
+
+        if (list.length > 0) {
+            let match = await bcrypt.compare(pwd, list[0].pwd);
+
+            if (match) {
+                msg = list[0].userName + "님 환영합니다!";
+                result = true;
+
                 let user = {
                     userId: list[0].userId,
                     userName: list[0].userName,
@@ -304,7 +348,7 @@ router.post("/login", async (req, res) => {
 const path = require('path');
 const multer = require('multer');
 
-// 업로드 폴더 (feed.js에서 쓰던 uploads랑 동일 위치로 맞추면 편함)
+// 업로드 폴더
 const uploadDir = path.join(__dirname, '..', 'uploads');
 
 const profileStorage = multer.diskStorage({
@@ -322,8 +366,6 @@ const uploadProfile = multer({ storage: profileStorage });
 /**
  * 프로필 수정
  * PUT /user/profile
- * - body(form-data): userName (필수), profileImg (파일, 선택)
- * - 조건: 작성글 수 10개 이상일 때만 프로필 이미지 변경 허용
  */
 router.put('/profile', authMiddleware, uploadProfile.single('profileImg'), async (req, res) => {
   const userId = req.user.userId;
@@ -338,7 +380,6 @@ router.put('/profile', authMiddleware, uploadProfile.single('profileImg'), async
   }
 
   try {
-    // 활동 글 수 확인 (브론즈 이상 체크)
     const [rows] = await db.query(
       'SELECT feedCnt FROM tbl_user WHERE userId = ?',
       [userId]
@@ -360,7 +401,6 @@ router.put('/profile', authMiddleware, uploadProfile.single('profileImg'), async
       profileImgPath = '/uploads/' + file.filename;
     }
 
-    // 업데이트 쿼리 구성
     let sql = 'UPDATE tbl_user SET userName = ?';
     const params = [userName.trim()];
 
@@ -374,7 +414,6 @@ router.put('/profile', authMiddleware, uploadProfile.single('profileImg'), async
 
     await db.query(sql, params);
 
-    // 수정 후 최신 정보 다시 조회해서 보내줌
     const [userRows] = await db.query(
       'SELECT userId, userName, intro, profileImgPath, feedCnt, follower, following FROM tbl_user WHERE userId = ?',
       [userId]

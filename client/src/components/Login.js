@@ -105,7 +105,7 @@ function Login() {
                 alert(data.msg);
                 if (data.result) {
                   localStorage.setItem("token", data.token);
-                  navigate("/feed");
+                  navigate("/feedAll");
                 }
               })
           }}

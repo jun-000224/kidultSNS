@@ -31,25 +31,39 @@ import BookmarkIcon from '@mui/icons-material/Bookmark';
 import { jwtDecode } from 'jwt-decode';
 import { useNavigate, useLocation } from 'react-router-dom';
 
-// 활동 등급에 따른 프로필 테두리 색상
-function getGradeBorderColor(feedCnt) {
-  const count = feedCnt || 0;
+/**
+ * 등급(status)별 프로필 테두리/광택 스타일
+ *  c: 일반, b: 브론즈, s: 실버, g: 골드, e: 에메랄드, a: 관리자
+ */
+function ColorByStatus(status) {
+  const s = (status || 'c').toLowerCase();
 
-  if (count >= 40) {
-    // 다이아
-    return '#38bdf8';
-  } else if (count >= 30) {
-    // 금색
-    return '#facc15';
-  } else if (count >= 20) {
-    // 은색
-    return '#e5e7eb';
-  } else if (count >= 10) {
-    // 브론즈
-    return '#b45309';
+  let border = '2px solid #111827';
+  let boxShadow = '0 0 0 2px rgba(17,24,39,0.5)';
+
+  if (s === 'b') {
+    border = '2px solid #b45309';
+    boxShadow =
+      '0 0 0 2px rgba(180,83,9,0.5), 0 0 16px rgba(180,83,9,0.7)';
+  } else if (s === 's') {
+    border = '2px solid #e5e7eb';
+    boxShadow =
+      '0 0 0 2px rgba(209,213,219,0.6), 0 0 18px rgba(156,163,175,0.9)';
+  } else if (s === 'g') {
+    border = '2px solid #facc15';
+    boxShadow =
+      '0 0 0 2px rgba(250,204,21,0.8), 0 0 22px rgba(245,158,11,0.95)';
+  } else if (s === 'e') {
+    border = '2px solid #22c55e';
+    boxShadow =
+      '0 0 0 2px rgba(34,197,94,0.7), 0 0 20px rgba(16,185,129,0.9)';
+  } else if (s === 'a') {
+    border = '2px solid #a855f7';
+    boxShadow =
+      '0 0 0 2px rgba(168,85,247,0.8), 0 0 24px rgba(129,140,248,0.95)';
   }
-  // 기본 검정
-  return '#111827';
+
+  return { border, boxShadow };
 }
 
 // 배열 섞기 (파도타기용 랜덤 정렬)
@@ -68,6 +82,8 @@ function Feed() {
 
   // 파도타기 모드 여부: /feed 경로일 때
   const isSurfMode = location.pathname === '/feed';
+
+  const [showSurfLabel, setShowSurfLabel] = useState(false);
 
   // 상세 모달 열림 여부
   const [open, setOpen] = useState(false);
@@ -189,6 +205,33 @@ function Feed() {
         console.log(err);
       });
   }
+
+  // 유저 정보 영역 클릭 시 마이페이지 / 상대 마이페이지 이동
+  const handleClickUserArea = (e, feedUserId) => {
+    // 카드 클릭으로 상세 모달 열리는 것 막기
+    e.stopPropagation();
+
+    const token = localStorage.getItem('token');
+    if (!token) {
+      alert('로그인 후 이용해주세요.');
+      navigate('/');
+      return;
+    }
+
+    let loginUserId = null;
+    try {
+      const decoded = jwtDecode(token);
+      loginUserId = decoded.userId;
+    } catch (err) {
+      console.log(err);
+    }
+
+    if (loginUserId && loginUserId === feedUserId) {
+      navigate('/mypage');
+    } else {
+      navigate('/user/' + feedUserId);
+    }
+  };
 
   // 좋아요 토글
   const handleToggleLike = async (feedId) => {
@@ -317,10 +360,7 @@ function Feed() {
         const safeList = Array.isArray(data.list)
           ? data.list.filter((item) => item != null)
           : [];
-        // 검색 결과는 그냥 검색 결과 순서대로 사용
         setFeeds(safeList);
-
-        // 검색 성공 후, 어떤 키워드로 검색했는지 저장
         setSearchKeyword(keyword);
       })
       .catch((err) => {
@@ -328,21 +368,31 @@ function Feed() {
       });
   }
 
-  // 사이트 처음 진입 & 모드 변경 시 피드 + 유저 정보 조회
+  // 초기 진입 / 모드 변경 시 처리
   useEffect(() => {
-    fnFeeds();
     fnGetUser();
 
-    // 파도타기 모드일 때만 파도 애니메이션 실행
     if (isSurfMode) {
+      // 파도타기 모드 진입: 파도 올리고, 라벨은 잠깐 숨김
       setShowWave(true);
-      const timer = setTimeout(() => {
-        setShowWave(false);
-      }, 1800); // 1.8초 정도
+      setShowSurfLabel(false);
 
-      return () => clearTimeout(timer);
+      const timer = setTimeout(() => {
+        fnFeeds();          // 이 시점에서 피드 로딩 + 셔플
+        setShowWave(false);
+        setShowSurfLabel(true);   // 이때부터 "파도타기" 텍스트 노출
+      }, 1800);
+
+      return () => {
+        clearTimeout(timer);
+        setShowWave(false);
+        setShowSurfLabel(false);
+      };
     } else {
+      // 타임라인 모드
+      fnFeeds();
       setShowWave(false);
+      setShowSurfLabel(false);
     }
   }, [isSurfMode]);
 
@@ -350,13 +400,6 @@ function Feed() {
   const handleClickOpen = (feed) => {
     setSelectedFeed(feed);
     setOpen(true);
-
-    // 현재는 더미 댓글
-    setComments([
-      { id: 'user1', text: '멋진 피규어네요.' },
-      { id: 'user2', text: '컬러감이 너무 예뻐요.' },
-      { id: 'user3', text: '소장욕구 자극됩니다.' }
-    ]);
     setNewComment('');
   };
 
@@ -416,7 +459,7 @@ function Feed() {
       formData.append('userId', decoded.userId);
       formData.append('title', writeTitle);
       formData.append('content', writeContent);
-      formData.append('hash', writeHash); // 해시태그 추가
+      formData.append('hash', writeHash);
 
       writeFiles.forEach((file) => {
         formData.append('file', file);
@@ -456,7 +499,9 @@ function Feed() {
     return selectedFeed.userName || '키덜트 유저';
   };
 
-  const userBorderColor = getGradeBorderColor(user?.feedCnt);
+  // 로그인 유저 등급 스타일
+  const userStatus = (user?.status || 'c').toLowerCase();
+  const avatarStyle = ColorByStatus(userStatus);
 
   return (
     <>
@@ -739,18 +784,18 @@ function Feed() {
                     fontWeight: 700
                   }}
                 >
-                  {isSurfMode ? '파도타기 🌊' : '타임라인'}
+                  {isSurfMode && showSurfLabel ? '파도타기 🌊' : '타임라인'}
                 </Typography>
 
-                {/* 기본 안내 문구 */}
-                {!searchKeyword && !isSurfMode && (
+                {/* 기본 안내 문구 (타임라인) */}
+                {!searchKeyword && !(isSurfMode && showSurfLabel) && (
                   <Typography variant="body2" sx={{ color: '#6b7280' }}>
                     오늘의 새로운 소식들을 확인해보세요
                   </Typography>
                 )}
 
                 {/* 파도타기 모드 안내 문구 */}
-                {!searchKeyword && isSurfMode && (
+                {!searchKeyword && (isSurfMode && showSurfLabel) && (
                   <Typography variant="body2" sx={{ color: '#2563eb', mt: 0.5 }}>
                     알고리즘을 끄고, 무작위로 떠다니는 피드를 보여주는 중입니다.
                   </Typography>
@@ -794,6 +839,9 @@ function Feed() {
                               mb: 1,
                               px: 1
                             }}
+                            onClick={(e) =>
+                              handleClickUserArea(e, feed.userId)
+                            }
                           >
                             <Avatar sx={{ bgcolor: '#2563eb' }}>
                               {displayInitial}
@@ -1019,8 +1067,8 @@ function Feed() {
                   height: 70,
                   margin: '0 auto',
                   mb: 2,
-                  border: `2px solid ${userBorderColor}`,
-                  boxSizing: 'border-box'
+                  boxSizing: 'border-box',
+                  ...avatarStyle
                 }}
               />
               <Typography variant="h6" sx={{ fontWeight: 600 }}>
@@ -1133,7 +1181,7 @@ function Feed() {
                   : 'http://localhost:3010/uploads/userDefault.png'
               }
               sx={{
-                border: `2px solid ${userBorderColor}`
+                ...avatarStyle
               }}
             >
               {user?.userName ? user.userName.charAt(0).toUpperCase() : 'U'}
