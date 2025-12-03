@@ -20,11 +20,11 @@
 
 ## 🌊 2. 파도타기 (랜덤 탐색 모드)
 
-- 전체 피드를 *무작위(Random)* 로 섞어서 노출
+- 전체 피드를 *무작위* 로 섞어서 노출
 - “새로운 취미를 탐험한다”는 컨셉
 - 파도타기 진입 시 파도 애니메이션 등장
 - 전용 설명 모달 제공
-  <P align="center"><img src="./images/wave-effect.png" width="500"</P>
+  <P align="center"><img src="./images/wave-effect.png" width="900"</P>
 
 ---
 
