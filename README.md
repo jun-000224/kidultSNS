@@ -25,6 +25,7 @@
 - 파도타기 진입 시 파도 애니메이션 등장
 - 전용 설명 모달 제공
   <P align="center"><img src="./images/wave-effect.png" width="900"</P>
+  <P align="center"><img src="./images/wave-after.png" width="500"</P>
 
 ---
 
