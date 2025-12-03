@@ -41,6 +41,7 @@
 - 닉네임, 소개글, 프로필사진 표시
 - 활동량에 따라 프로필 아바타 테두리 색상 변화  
   - 브론즈 / 실버 / 골드 / 에메랄드 등급 시스템
+  <P align="center"><img src="./images/grade-icons.png" width="500"</P>
 
 ---
 
