@@ -24,10 +24,11 @@
 - “새로운 취미를 탐험한다”는 컨셉
 - 파도타기 진입 시 파도 애니메이션 등장
 - 전용 설명 모달 제공
-  <p align="center" style="display:flex; gap:20px; justify-content:center; align-items:center;">
+  <p style="display:flex; gap:20px; justify-content:flex-start; align-items:center;">
   <img src="./images/wave-effect.png" height="300">
   <img src="./images/wave-after.png" height="300">
   </p>
+
 
 ---
 
