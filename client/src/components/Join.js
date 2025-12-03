@@ -24,16 +24,8 @@ function Join() {
           회원가입
         </Typography>
 
-        {/* 아이디 */}
-        <TextField
-          inputRef={userId}
-          label="아이디"
-          variant="outlined"
-          margin="normal"
-          fullWidth
-        />
+        <TextField inputRef={userId} label="아이디" variant="outlined" margin="normal" fullWidth />
 
-        {/* 비밀번호 */}
         <TextField
           label="비밀번호"
           variant="outlined"
@@ -43,32 +35,11 @@ function Join() {
           inputRef={pwd}
         />
 
-        {/* 닉네임 */}
-        <TextField
-          inputRef={userName}
-          label="닉네임"
-          variant="outlined"
-          margin="normal"
-          fullWidth
-        />
+        <TextField inputRef={userName} label="닉네임" variant="outlined" margin="normal" fullWidth />
 
-        {/* 주소 */}
-        <TextField
-          inputRef={addr}
-          label="주소"
-          variant="outlined"
-          margin="normal"
-          fullWidth
-        />
+        <TextField inputRef={addr} label="주소" variant="outlined" margin="normal" fullWidth />
 
-        {/* 전화번호 */}
-        <TextField
-          inputRef={phone}
-          label="핸드폰 번호"
-          variant="outlined"
-          margin="normal"
-          fullWidth
-        />
+        <TextField inputRef={phone} label="핸드폰 번호" variant="outlined" margin="normal" fullWidth />
 
         <Button
           variant="contained"
@@ -86,16 +57,15 @@ function Join() {
 
             fetch("http://localhost:3010/user/join", {
               method: "POST",
-              headers: {
-                "Content-type": "application/json"
-              },
+              headers: { "Content-type": "application/json" },
               body: JSON.stringify(param)
             })
               .then(res => res.json())
               .then(data => {
-                console.log(data);
                 alert(data.msg);
-                navigate("/");
+                if (data.result === "success") {
+                  navigate("/");
+                }
               });
           }}
         >

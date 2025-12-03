@@ -121,8 +121,7 @@ router.post("/join", async (req, res) => {
 
         const hashedPwd = await bcrypt.hash(pwd, 10);
 
-        // tbl_user 구조 기준: userId, pwd, userName, addr, phone 만 삽입
-        // follower, following, intro, profileImgPath, status 등은 DB 기본값 사용
+        // DB 구조 그대로 일치 (INSERT 단 1회만 실행)
         const sql =
             "INSERT INTO tbl_user " +
             "  (userId, pwd, userName, addr, phone) " +
@@ -254,11 +253,6 @@ router.get("/me", authMiddleware, async (req, res) => {
 
 /**
  * 프로필 수정 (닉네임 + 프로필 이미지)
- * PUT /user/profile
- * 헤더: Authorization: Bearer 토큰
- * body(form-data):
- *   - userName (text)
- *   - profileImg (file, 선택)
  */
 router.put("/profile", authMiddleware, upload.single("profileImg"), async (req, res) => {
     const loginUserId = req.user.userId;
@@ -273,7 +267,6 @@ router.put("/profile", authMiddleware, upload.single("profileImg"), async (req, 
     }
 
     try {
-        // 기존 유저 정보 조회
         const [rows] = await db.query(
             "SELECT * FROM tbl_user WHERE userId = ?",
             [loginUserId]
@@ -324,14 +317,12 @@ router.put("/profile", authMiddleware, upload.single("profileImg"), async (req, 
 
 /**
  * 유저 정보 조회 + 해당 유저 게시물 목록 조회
- * GET /user/:userId
  */
 router.get("/:userId", async (req, res) => {
     let { userId } = req.params;
-    const loginUserId = getLoginUserId(req); // 없으면 null
+    const loginUserId = getLoginUserId(req);
 
     try {
-        // 유저 기본 정보 + 게시물 개수
         let sqlUser =
             "SELECT U.userId, U.pwd, U.userName, U.addr, U.phone, " +
             "       U.cdatetime, U.udatetime, U.follower, U.following, " +
@@ -350,7 +341,7 @@ router.get("/:userId", async (req, res) => {
             return res.status(404).json({ result: "fail", msg: "유저가 존재하지 않습니다." });
         }
 
-        // 유저가 작성한 게시물 목록 + 이미지 전체
+        // 유저 게시물 + 이미지 전체
         let sqlFeed =
             "SELECT F.*, " +
             "       I.imgId, I.imgName, I.imgPath, " +
@@ -365,7 +356,6 @@ router.get("/:userId", async (req, res) => {
 
         const feedList = buildFeedList(feedRows);
 
-        // 로그인 되어 있으면 이 유저를 팔로우 중인지 여부 확인
         let isFollowing = false;
         if (loginUserId) {
             let [followRows] = await db.query(
@@ -390,8 +380,6 @@ router.get("/:userId", async (req, res) => {
 
 /**
  * 팔로우 토글
- * POST /user/:userId/follow
- * 헤더: Authorization: Bearer 토큰
  */
 router.post("/:userId/follow", authMiddleware, async (req, res) => {
     const { userId: targetUserId } = req.params;
@@ -405,7 +393,6 @@ router.post("/:userId/follow", authMiddleware, async (req, res) => {
             });
         }
 
-        // 이미 팔로우 중인지 확인
         let [rows] = await db.query(
             "SELECT * FROM tbl_follow WHERE followerId = ? AND followingId = ?",
             [loginUserId, targetUserId]
@@ -414,14 +401,12 @@ router.post("/:userId/follow", authMiddleware, async (req, res) => {
         let isFollowing;
 
         if (rows.length > 0) {
-            // 언팔
             await db.query(
                 "DELETE FROM tbl_follow WHERE followerId = ? AND followingId = ?",
                 [loginUserId, targetUserId]
             );
             isFollowing = false;
         } else {
-            // 팔로우 추가
             await db.query(
                 "INSERT INTO tbl_follow (followerId, followingId) VALUES (?, ?)",
                 [loginUserId, targetUserId]
@@ -429,7 +414,6 @@ router.post("/:userId/follow", authMiddleware, async (req, res) => {
             isFollowing = true;
         }
 
-        // 최신 팔로워 수 / 팔로잉 수 계산
         let [followerRows] = await db.query(
             "SELECT COUNT(*) AS cnt FROM tbl_follow WHERE followingId = ?",
             [targetUserId]
@@ -465,7 +449,6 @@ router.post("/:userId/follow", authMiddleware, async (req, res) => {
 
 /**
  * 특정 유저의 팔로워 목록
- * GET /user/:userId/followers
  */
 router.get("/:userId/followers", async (req, res) => {
     const { userId } = req.params;
@@ -492,7 +475,6 @@ router.get("/:userId/followers", async (req, res) => {
 
 /**
  * 특정 유저가 팔로우하는 목록(팔로잉)
- * GET /user/:userId/following
  */
 router.get("/:userId/following", async (req, res) => {
     const { userId } = req.params;
