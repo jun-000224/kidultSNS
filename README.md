@@ -20,10 +20,16 @@
 
 ## 🌊 2. 파도타기 (랜덤 탐색 모드)
 
-- 전체 피드를 *무작위(Random)* 로 섞어서 노출
+- 전체 피드를 *무작위* 로 섞어서 노출
 - “새로운 취미를 탐험한다”는 컨셉
 - 파도타기 진입 시 파도 애니메이션 등장
 - 전용 설명 모달 제공
+- 피드 색상을 푸른 테마로 변경하여 탐색 모드임을 직관적으로 인지할 수 있도록 제공
+  <p style="display:flex; gap:20px; justify-content:flex-start; align-items:center;">
+  <img src="./images/wave-effect.png" height="300">
+  <img src="./images/wave-after.png" height="300">
+  </p>
+
 
 ---
 
@@ -40,7 +46,8 @@
 - 사용자 프로필 정보 조회
 - 닉네임, 소개글, 프로필사진 표시
 - 활동량에 따라 프로필 아바타 테두리 색상 변화  
-  - 브론즈 / 실버 / 골드 / 다이아 등급 시스템
+  - 브론즈 / 실버 / 골드 / 에메랄드 등급 시스템
+  <P align="center"><img src="./images/grade-icons.png" width="500"</P>
 
 ---
 
