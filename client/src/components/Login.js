@@ -1,3 +1,4 @@
+// src/components/Login.js
 import React, { useRef } from 'react';
 import { TextField, Button, Box, Paper } from '@mui/material';
 import { Link, useNavigate } from 'react-router-dom';
@@ -11,35 +12,13 @@ function Login() {
     <Box
       sx={{
         display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
+        justifyContent: 'center',    // 가로 정중앙
+        alignItems: 'center',        // 세로 정중앙
         minHeight: '100vh',
         background: '#fafafa'
       }}
     >
-      {/* 왼쪽 이미지 박스 */}
-      <Box
-        sx={{
-          display: { xs: 'none', md: 'block' },
-          marginRight: '40px'
-        }}
-      >
-        <Paper
-          elevation={0}
-          sx={{
-            width: '380px',
-            height: '600px',
-            borderRadius: '20px',
-            backgroundImage: `url('http://localhost:3010/uploads/HWIMG.png')`,
-            backgroundSize: 'contain',       // 이미지 전체 보이도록
-            backgroundPosition: 'center',    // 가운데 정렬
-            backgroundRepeat: 'no-repeat',   // 반복 없음
-            backgroundColor: '#fafafa'       // 여백 배경색
-          }}
-        />
-      </Box>
-
-      {/* 오른쪽 로그인 카드 */}
+      {/* 로그인 카드만 중앙 배치 */}
       <Paper
         elevation={6}
         sx={{
@@ -59,7 +38,7 @@ function Login() {
           />
         </Box>
 
-        {/* 로그인 입력 */}
+        {/* 아이디 */}
         <TextField
           inputRef={idRef}
           label="아이디"
@@ -67,6 +46,8 @@ function Login() {
           margin="dense"
           fullWidth
         />
+
+        {/* 비밀번호 */}
         <TextField
           label="비밀번호"
           variant="outlined"
@@ -94,11 +75,21 @@ function Login() {
               .then(res => res.json())
               .then(data => {
                 console.log(data);
-                alert(data.msg);
-                if (data.result) {
+
+                if (data.result === "success") {
+                  const userName = data.user?.userName || "";
+                  alert(`${userName} ${data.msg}`);   // 예: "바나나맛커피 님 환영합니다."
+
                   localStorage.setItem("token", data.token);
                   navigate("/feedAll");
+                } else {
+                  // 실패일 때는 user 없음 → msg만
+                  alert(data.msg || "로그인에 실패했습니다.");
                 }
+              })
+              .catch(err => {
+                console.error(err);
+                alert("로그인 중 오류가 발생했습니다.");
               });
           }}
           variant="contained"
@@ -115,6 +106,7 @@ function Login() {
         >
           로그인
         </Button>
+
 
         {/* 안내 문구 */}
         <Box

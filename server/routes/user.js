@@ -10,10 +10,10 @@ const path = require("path");
 
 const JWT_KEY = "server_secret_key";
 
-// 업로드 폴더 (feed.js와 동일 경로 사용)
+// 업로드 폴더
 const uploadDir = path.join(__dirname, "..", "uploads");
 
-// multer 설정 (프로필 이미지용)
+// multer 설정
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
         cb(null, uploadDir);
@@ -26,7 +26,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage });
 
-// 요청 헤더에서 토큰 파싱해서 userId 얻는 함수
+// 토큰에서 userId 가져오기
 function getLoginUserId(req) {
     const authHeader = req.headers['authorization'] || '';
     const token = authHeader.split(' ')[1];
@@ -42,7 +42,7 @@ function getLoginUserId(req) {
     }
 }
 
-// feed.js 에서 쓰는 형태와 동일하게 피드 리스트를 묶는 함수
+// feed 리스트 구성
 function buildFeedList(rows) {
     const map = new Map();
 
@@ -52,7 +52,7 @@ function buildFeedList(rows) {
                 feedId: row.feedId,
                 userId: row.userId,
                 userName: row.userName,
-                status: row.status,               // 등급
+                status: row.status,
                 profileImgPath: row.profileImgPath,
                 title: row.title,
                 content: row.content,
@@ -91,11 +91,50 @@ function buildFeedList(rows) {
     return Array.from(map.values());
 }
 
-/**
- * 회원가입
- * POST /user/join
- * body: { userId, pwd, userName, addr, phone }
- */
+/* ------------------------------------------
+    중복 체크 API
+------------------------------------------- */
+
+// 아이디 중복 체크
+router.get("/check-id", async (req, res) => {
+    const { userId } = req.query;
+
+    try {
+        const [rows] = await db.query(
+            "SELECT COUNT(*) AS cnt FROM tbl_user WHERE userId = ?",
+            [userId]
+        );
+
+        res.json({ exists: rows[0].cnt > 0 });
+
+    } catch (error) {
+        console.log("check-id error:", error);
+        res.status(500).json({ exists: false });
+    }
+});
+
+// 전화번호 중복 체크
+router.get("/check-phone", async (req, res) => {
+    const { phone } = req.query;
+
+    try {
+        const [rows] = await db.query(
+            "SELECT COUNT(*) AS cnt FROM tbl_user WHERE phone = ?",
+            [phone]
+        );
+
+        res.json({ exists: rows[0].cnt > 0 });
+
+    } catch (error) {
+        console.log("check-phone error:", error);
+        res.status(500).json({ exists: false });
+    }
+});
+
+/* ------------------------------------------
+    회원가입
+------------------------------------------- */
+
 router.post("/join", async (req, res) => {
     const { userId, pwd, userName, addr, phone } = req.body;
 
@@ -121,7 +160,6 @@ router.post("/join", async (req, res) => {
 
         const hashedPwd = await bcrypt.hash(pwd, 10);
 
-        // DB 구조 그대로 일치 (INSERT 단 1회만 실행)
         const sql =
             "INSERT INTO tbl_user " +
             "  (userId, pwd, userName, addr, phone) " +
@@ -148,11 +186,10 @@ router.post("/join", async (req, res) => {
     }
 });
 
-/**
- * 로그인
- * POST /user/login
- * body: { userId, pwd }
- */
+/* ------------------------------------------
+    로그인
+------------------------------------------- */
+
 router.post("/login", async (req, res) => {
     const { userId, pwd } = req.body;
 
@@ -186,20 +223,15 @@ router.post("/login", async (req, res) => {
             });
         }
 
-        // JWT 발급
         const token = jwt.sign(
-            {
-                userId: user.userId
-            },
+            { userId: user.userId },
             JWT_KEY,
-            {
-                expiresIn: "7d"
-            }
+            { expiresIn: "7d" }
         );
 
         res.json({
             result: "success",
-            msg: "로그인에 성공했습니다.",
+            msg: "님 환영합니다.",
             token,
             user: {
                 userId: user.userId,
@@ -213,6 +245,7 @@ router.post("/login", async (req, res) => {
                 status: user.status
             }
         });
+
     } catch (error) {
         console.log("POST /user/login error ===> ", error);
         res.status(500).json({
@@ -222,11 +255,10 @@ router.post("/login", async (req, res) => {
     }
 });
 
-/**
- * 내 정보 조회
- * GET /user/me
- * 헤더: Authorization: Bearer 토큰
- */
+/* ------------------------------------------
+    내 정보 조회
+------------------------------------------- */
+
 router.get("/me", authMiddleware, async (req, res) => {
     const loginUserId = req.user.userId;
 
@@ -237,7 +269,7 @@ router.get("/me", authMiddleware, async (req, res) => {
             [loginUserId]
         );
 
-       	if (rows.length === 0) {
+        if (rows.length === 0) {
             return res.status(404).json({ result: "fail", msg: "유저가 존재하지 않습니다." });
         }
 
@@ -251,9 +283,10 @@ router.get("/me", authMiddleware, async (req, res) => {
     }
 });
 
-/**
- * 프로필 수정 (닉네임 + 프로필 이미지)
- */
+/* ------------------------------------------
+    프로필 수정
+------------------------------------------- */
+
 router.put("/profile", authMiddleware, upload.single("profileImg"), async (req, res) => {
     const loginUserId = req.user.userId;
     const { userName } = req.body;
@@ -282,7 +315,6 @@ router.put("/profile", authMiddleware, upload.single("profileImg"), async (req, 
 
         let profileImgPath = user.profileImgPath;
 
-        // 브론즈 이상부터 프로필 이미지 변경 가능 (b, s, g, e, a)
         const status = (user.status || 'c').toLowerCase();
         const canChangeProfileImage = ['b', 's', 'g', 'e', 'a'].includes(status);
 
@@ -315,9 +347,11 @@ router.put("/profile", authMiddleware, upload.single("profileImg"), async (req, 
     }
 });
 
-/**
- * 유저 정보 조회 + 해당 유저 게시물 목록 조회
- */
+
+/* ------------------------------------------
+    유저 정보 + 게시물
+------------------------------------------- */
+
 router.get("/:userId", async (req, res) => {
     let { userId } = req.params;
     const loginUserId = getLoginUserId(req);
@@ -329,9 +363,7 @@ router.get("/:userId", async (req, res) => {
             "       U.intro, U.profileImgPath, IFNULL(F.cnt, 0) AS feedCnt, U.status " +
             "FROM tbl_user U " +
             "LEFT JOIN ( " +
-            "   SELECT userId, COUNT(*) AS cnt " +
-            "   FROM tbl_feed " +
-            "   GROUP BY userId " +
+            "   SELECT userId, COUNT(*) AS cnt FROM tbl_feed GROUP BY userId " +
             ") F ON U.userId = F.userId " +
             "WHERE U.userId = ?";
 
@@ -341,11 +373,8 @@ router.get("/:userId", async (req, res) => {
             return res.status(404).json({ result: "fail", msg: "유저가 존재하지 않습니다." });
         }
 
-        // 유저 게시물 + 이미지 전체
         let sqlFeed =
-            "SELECT F.*, " +
-            "       I.imgId, I.imgName, I.imgPath, " +
-            "       U.userName, U.status, U.profileImgPath " +
+            "SELECT F.*, I.imgId, I.imgName, I.imgPath, U.userName, U.status, U.profileImgPath " +
             "FROM tbl_feed F " +
             "LEFT JOIN tbl_feed_img I ON F.feedId = I.feedId " +
             "JOIN tbl_user U ON F.userId = U.userId " +
@@ -357,6 +386,7 @@ router.get("/:userId", async (req, res) => {
         const feedList = buildFeedList(feedRows);
 
         let isFollowing = false;
+
         if (loginUserId) {
             let [followRows] = await db.query(
                 "SELECT * FROM tbl_follow WHERE followerId = ? AND followingId = ?",
@@ -378,9 +408,11 @@ router.get("/:userId", async (req, res) => {
     }
 });
 
-/**
- * 팔로우 토글
- */
+
+/* ------------------------------------------
+    팔로우 토글
+------------------------------------------- */
+
 router.post("/:userId/follow", authMiddleware, async (req, res) => {
     const { userId: targetUserId } = req.params;
     const loginUserId = req.user.userId;
@@ -447,9 +479,11 @@ router.post("/:userId/follow", authMiddleware, async (req, res) => {
     }
 });
 
-/**
- * 특정 유저의 팔로워 목록
- */
+
+/* ------------------------------------------
+    팔로워 목록
+------------------------------------------- */
+
 router.get("/:userId/followers", async (req, res) => {
     const { userId } = req.params;
 
@@ -473,9 +507,11 @@ router.get("/:userId/followers", async (req, res) => {
     }
 });
 
-/**
- * 특정 유저가 팔로우하는 목록(팔로잉)
- */
+
+/* ------------------------------------------
+    팔로잉 목록
+------------------------------------------- */
+
 router.get("/:userId/following", async (req, res) => {
     const { userId } = req.params;
 
@@ -498,5 +534,89 @@ router.get("/:userId/following", async (req, res) => {
         res.status(500).json({ result: "fail" });
     }
 });
+
+/* ------------------------------------------
+    로그인
+------------------------------------------- */
+
+router.post("/login", async (req, res) => {
+    const { userId, pwd } = req.body;
+
+    if (!userId || !pwd) {
+        return res.status(400).json({
+            result: "fail",
+            msg: "아이디와 비밀번호를 입력해주세요."
+        });
+    }
+
+    try {
+        const [rows] = await db.query(
+            "SELECT * FROM tbl_user WHERE userId = ?",
+            [userId]
+        );
+
+        if (rows.length === 0) {
+            return res.json({
+                result: "fail",
+                msg: "아이디 또는 비밀번호가 올바르지 않습니다."
+            });
+        }
+
+        const user = rows[0];
+
+        const isMatch = await bcrypt.compare(pwd, user.pwd);
+        if (!isMatch) {
+            return res.json({
+                result: "fail",
+                msg: "아이디 또는 비밀번호가 올바르지 않습니다."
+            });
+        }
+
+        const token = jwt.sign(
+            { userId: user.userId },
+            JWT_KEY,
+            { expiresIn: "7d" }
+        );
+
+        res.json({
+            result: "success",
+            msg: "님 환영합니다.",
+            token,
+            user: {
+                userId: user.userId,
+                userName: user.userName,
+                addr: user.addr,
+                phone: user.phone,
+                follower: user.follower,
+                following: user.following,
+                intro: user.intro,
+                profileImgPath: user.profileImgPath,
+                status: user.status
+            }
+        });
+
+    } catch (error) {
+        console.log("POST /user/login error ===> ", error);
+        res.status(500).json({
+            result: "fail",
+            msg: "로그인 중 오류가 발생했습니다."
+        });
+    }
+});
+
+/* ------------------------------------------
+    로그아웃
+------------------------------------------- */
+
+router.post("/logout", (req, res) => {
+    // JWT는 서버에서 별도 세션을 들고 있지 않으니까
+    // 클라이언트에서 토큰만 지우면 사실상 로그아웃.
+    // 여기서는 메시지만 내려준다.
+    return res.json({
+        result: "success",
+        msg: "로그아웃 되었습니다."
+    });
+});
+
 
 module.exports = router;
