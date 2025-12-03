@@ -24,7 +24,7 @@
 - “새로운 취미를 탐험한다”는 컨셉
 - 파도타기 진입 시 파도 애니메이션 등장
 - 전용 설명 모달 제공
-  <P><imp src="./images/wave-effect.png" widht="500"</P>
+  <P align="center"><img src="./images/wave-effect.png" width="500"</P>
 
 ---
 
