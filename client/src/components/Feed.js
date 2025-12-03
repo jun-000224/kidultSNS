@@ -32,35 +32,37 @@ import { jwtDecode } from 'jwt-decode';
 import { useNavigate, useLocation } from 'react-router-dom';
 
 /**
- * 등급(status)별 프로필 테두리/광택 스타일
- *  c: 일반, b: 브론즈, s: 실버, g: 골드, e: 에메랄드, a: 관리자
+ * 등급(status)별 프로필 메탈릭 테두리/광택 스타일
+ * c: 일반, b: 브론즈, s: 실버, g: 골드, e: 에메랄드, a: 관리자
+ * (MyPage와 동일한 스타일)
  */
 function ColorByStatus(status) {
   const s = (status || 'c').toLowerCase();
 
   let border = '2px solid #111827';
-  let boxShadow = '0 0 0 2px rgba(17,24,39,0.5)';
+  let boxShadow =
+    '0 0 6px rgba(17,24,39,0.55), inset 0 0 3px rgba(255,255,255,0.25)';
 
   if (s === 'b') {
     border = '2px solid #b45309';
     boxShadow =
-      '0 0 0 2px rgba(180,83,9,0.5), 0 0 16px rgba(180,83,9,0.7)';
+      '0 0 8px rgba(180,83,9,0.55), inset 0 0 3px rgba(255,255,255,0.35)';
   } else if (s === 's') {
-    border = '2px solid #e5e7eb';
+    border = '2px solid #d1d5db';
     boxShadow =
-      '0 0 0 2px rgba(209,213,219,0.6), 0 0 18px rgba(156,163,175,0.9)';
+      '0 0 9px rgba(209,213,219,0.6), inset 0 0 4px rgba(255,255,255,0.45)';
   } else if (s === 'g') {
     border = '2px solid #facc15';
     boxShadow =
-      '0 0 0 2px rgba(250,204,21,0.8), 0 0 22px rgba(245,158,11,0.95)';
+      '0 0 10px rgba(250,204,21,0.7), inset 0 0 4px rgba(255,255,255,0.45)';
   } else if (s === 'e') {
     border = '2px solid #22c55e';
     boxShadow =
-      '0 0 0 2px rgba(34,197,94,0.7), 0 0 20px rgba(16,185,129,0.9)';
+      '0 0 10px rgba(16,185,129,0.65), inset 0 0 4px rgba(255,255,255,0.45)';
   } else if (s === 'a') {
     border = '2px solid #a855f7';
     boxShadow =
-      '0 0 0 2px rgba(168,85,247,0.8), 0 0 24px rgba(129,140,248,0.95)';
+      '0 0 11px rgba(168,85,247,0.7), inset 0 0 4px rgba(255,255,255,0.45)';
   }
 
   return { border, boxShadow };
@@ -862,7 +864,7 @@ function Feed() {
                 )}
 
                 {/* 파도타기 모드 안내 문구 */}
-                {!searchKeyword && (isSurfMode && showSurfLabel) && (
+                {!searchKeyword && isSurfMode && showSurfLabel && (
                   <Typography variant="body2" sx={{ color: '#2563eb', mt: 0.5 }}>
                     알고리즘을 끄고, 무작위로 떠다니는 피드를 보여주는 중입니다.
                   </Typography>
@@ -1177,9 +1179,7 @@ function Feed() {
                                     sx={{ fontSize: 20, color: '#0ea5e9' }}
                                   />
                                 ) : (
-                                  <BookmarkBorderIcon
-                                    sx={{ fontSize: 20 }}
-                                  />
+                                  <BookmarkBorderIcon sx={{ fontSize: 20 }} />
                                 )}
                               </IconButton>
                             </Box>
